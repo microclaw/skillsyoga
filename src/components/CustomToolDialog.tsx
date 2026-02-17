@@ -27,10 +27,6 @@ export function CustomToolDialog({
       toast.error("All fields are required");
       return;
     }
-    if (!skillsPath.includes("skills")) {
-      toast.error("Skills Path should point to a skills directory");
-      return;
-    }
 
     try {
       await onSaved({ id, name, configPath, skillsPath, cli });
@@ -47,7 +43,7 @@ export function CustomToolDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Custom Tool</DialogTitle>
-          <DialogDescription>Register an additional agent tool config and skills path.</DialogDescription>
+          <DialogDescription>Register an additional agent tool with any folder path.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">

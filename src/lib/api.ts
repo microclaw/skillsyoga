@@ -4,7 +4,9 @@ import type {
   DashboardData,
   InstallFromRegistryRequest,
   InstallSkillRequest,
+  SaveSkillEntryRequest,
   SaveSkillRequest,
+  SkillFileEntry,
   SearchSkillResult,
   SkillInfo,
 } from "@/types/models";
@@ -21,8 +23,20 @@ export async function readSkillFile(path: string) {
   return invoke<string>("read_skill_file", { path });
 }
 
+export async function listSkillFiles(path: string) {
+  return invoke<SkillFileEntry[]>("list_skill_files", { path });
+}
+
+export async function readSkillEntry(path: string, relativePath: string) {
+  return invoke<string>("read_skill_entry", { path, relativePath });
+}
+
 export async function saveSkillFile(request: SaveSkillRequest) {
   return invoke<SkillInfo>("save_skill_file", { request });
+}
+
+export async function saveSkillEntry(request: SaveSkillEntryRequest) {
+  return invoke<void>("save_skill_entry", { request });
 }
 
 export async function deleteSkill(path: string) {

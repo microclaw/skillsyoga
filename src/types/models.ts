@@ -76,3 +76,14 @@ export interface InstallFromRegistryRequest {
   skillId: string;
   targetToolId: string;
 }
+
+export interface SkillFileEntry {
+  relativePath: string;
+  isDir: boolean;
+}
+
+export interface SaveSkillEntryRequest {
+  path: string;
+  relativePath: string;
+  content: string;
+}

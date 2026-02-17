@@ -25,6 +25,7 @@ function formatInstalls(n: number): string {
 
 type InstallPhase = "select" | "installing" | "done" | "error";
 type MarketplaceMode = "discover" | "import";
+const QUICK_QUERIES = ["react", "testing", "python", "devops", "prompting"];
 
 export function MarketplaceView({
   sources,
@@ -64,6 +65,12 @@ export function MarketplaceView({
       setTargetToolId(toolOptions[0].id);
     }
   }, [targetToolId, toolOptions]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   const doSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -148,50 +155,51 @@ export function MarketplaceView({
 
   return (
     <div className="space-y-5">
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="flex items-start gap-2">
-            {!installReady && <CircleAlert className="mt-0.5 size-4 text-amber-300" />}
-            <div className="text-sm">
-              <p className="font-medium">
-                {installReady
-                  ? `${toolOptions.length} tool(s) ready for install`
-                  : "No install-ready tools found"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {detectedCount} detected · {enabledCount} enabled
-                {!installReady && " · Enable at least one detected tool in Tools"}
-              </p>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/80 bg-card/60 px-4 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold">Skill Discovery</p>
+            {!installReady && <CircleAlert className="size-3.5 text-amber-300" />}
           </div>
-          <div className="inline-flex items-center rounded-md border border-border p-0.5">
-            <Button
-              variant={mode === "discover" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setMode("discover")}
-            >
-              Discover
-            </Button>
-            <Button
-              variant={mode === "import" ? "secondary" : "ghost"}
-              size="sm"
-              onClick={() => setMode("import")}
-            >
-              Import
-            </Button>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <Badge variant={installReady ? "secondary" : "outline"} className="text-[10px]">
+              {installReady ? `${toolOptions.length} install-ready` : "No install-ready tools"}
+            </Badge>
+            <Badge variant="secondary" className="text-[10px]">{detectedCount} detected</Badge>
+            <Badge variant="secondary" className="text-[10px]">{enabledCount} enabled</Badge>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+        <div className="inline-flex items-center rounded-lg border border-border/80 bg-muted/30 p-1">
+          <Button
+            variant={mode === "discover" ? "secondary" : "ghost"}
+            size="sm"
+            className="min-w-24"
+            onClick={() => setMode("discover")}
+          >
+            Discover
+          </Button>
+          <Button
+            variant={mode === "import" ? "secondary" : "ghost"}
+            size="sm"
+            className="min-w-24"
+            onClick={() => setMode("import")}
+          >
+            Import
+          </Button>
+        </div>
+      </div>
 
       {mode === "discover" && (
-        <>
+        <div className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Search className="size-4" />
-                Find Skills
+                Discover Skills
               </CardTitle>
-              <CardDescription>Search the skills.sh registry and install in one click.</CardDescription>
+              <CardDescription>
+                Search the skills.sh registry and install directly to your selected tool.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Input
@@ -199,6 +207,21 @@ export function MarketplaceView({
                 onChange={(e) => onSearchChange(e.currentTarget.value)}
                 placeholder="Search skills... (e.g. react, python, testing)"
               />
+              <div className="flex flex-wrap gap-1.5">
+                {QUICK_QUERIES.map((query) => (
+                  <button
+                    key={query}
+                    type="button"
+                    className="rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    onClick={() => {
+                      setSearchQuery(query);
+                      void doSearch(query);
+                    }}
+                  >
+                    {query}
+                  </button>
+                ))}
+              </div>
 
               {searching && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -211,15 +234,21 @@ export function MarketplaceView({
                 <p className="text-sm text-muted-foreground">No skills found for "{searchQuery}".</p>
               )}
 
+              {!searching && !hasSearched && (
+                <div className="rounded-md border border-dashed border-border/80 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+                  Start with a query or pick a quick keyword above.
+                </div>
+              )}
+
               {searchResults.length > 0 && (
                 <div className="grid grid-cols-1 gap-2">
                   {searchResults.map((result) => (
                     <div
                       key={result.id}
-                      className="flex items-center justify-between rounded-md border border-border/70 bg-muted/30 px-3 py-2"
+                      className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2.5"
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 truncate">
                           <span className="font-medium text-sm">{result.name}</span>
                           <Badge variant="secondary" className="text-[10px]">
                             {formatInstalls(result.installs)} installs
@@ -231,7 +260,7 @@ export function MarketplaceView({
                       </div>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="default"
                         disabled={!installReady}
                         onClick={() => openInstallDialog(result)}
                       >
@@ -244,42 +273,7 @@ export function MarketplaceView({
               )}
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Curated Sources</CardTitle>
-              <CardDescription>Select a source to prefill the GitHub import form.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-2">
-              {sources.map((source) => (
-                <button
-                  key={source.id}
-                  type="button"
-                  onClick={() => {
-                    setRepoUrl(source.repoUrl);
-                    setMode("import");
-                  }}
-                  className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/60"
-                >
-                  <div className="mb-1 flex items-center gap-2 font-medium">
-                    <Sparkles className="size-3.5 text-amber-300" />
-                    {source.name}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{source.description}</div>
-                  {source.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {source.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-[10px]">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-        </>
+        </div>
       )}
 
       {/* Install dialog */}
@@ -366,7 +360,9 @@ export function MarketplaceView({
           <Card>
             <CardHeader>
               <CardTitle>Curated Sources</CardTitle>
-              <CardDescription>Click any source to prefill the import form.</CardDescription>
+              <CardDescription>
+                Pick a trusted source to prefill the GitHub URL, then install.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-1 gap-2">
               {sources.map((source) => (
@@ -376,7 +372,7 @@ export function MarketplaceView({
                   onClick={() => setRepoUrl(source.repoUrl)}
                   className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/60"
                 >
-                  <div className="mb-1 flex items-center gap-2 font-medium">
+                  <div className="mb-1 flex items-center gap-2 font-medium text-sm">
                     <Sparkles className="size-3.5 text-amber-300" />
                     {source.name}
                   </div>
@@ -398,12 +394,18 @@ export function MarketplaceView({
           <Card>
             <CardHeader>
               <CardTitle>Import from GitHub URL</CardTitle>
-              <CardDescription>Import one skill folder from a GitHub repository.</CardDescription>
+              <CardDescription>
+                Import one skill folder from a repository. Use Skill Path when needed.
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
                 <Label>Repository URL</Label>
-                <Input value={repoUrl} onChange={(event) => setRepoUrl(event.currentTarget.value)} placeholder="https://github.com/org/repo" />
+                <Input
+                  value={repoUrl}
+                  onChange={(event) => setRepoUrl(event.currentTarget.value)}
+                  placeholder="https://github.com/org/repo"
+                />
               </div>
               <div className="space-y-1">
                 <Label>Skill Path (Optional)</Label>

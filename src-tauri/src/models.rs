@@ -111,3 +111,18 @@ pub struct InstallFromRegistryRequest {
     pub skill_id: String,
     pub target_tool_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillFileEntry {
+    pub relative_path: String,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveSkillEntryRequest {
+    pub path: String,
+    pub relative_path: String,
+    pub content: String,
+}

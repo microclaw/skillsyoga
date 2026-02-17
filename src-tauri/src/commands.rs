@@ -1,10 +1,15 @@
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{
+    env, fs,
+    path::{Component, Path, PathBuf},
+    process::Command,
+};
 
 use crate::error::AppError;
 use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir};
 use crate::models::{
     CustomToolInput, DashboardData, DashboardStats, InstallFromRegistryRequest,
-    InstallSkillRequest, SaveSkillRequest, SearchSkillResult, SearchSkillsResponse, SkillInfo,
+    InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
+    SearchSkillsResponse, SkillFileEntry, SkillInfo,
 };
 use crate::skills::{
     collect_skills_from_tool, copy_dir_recursive, dir_display_name, discover_skill_dir,
@@ -12,6 +17,55 @@ use crate::skills::{
 };
 use crate::state::{app_data_dir, load_state, save_state};
 use crate::tools::{built_in_tools, curated_sources, find_tool_by_id, tool_input_to_info};
+
+fn normalize_relative_path(input: &str) -> Result<PathBuf, AppError> {
+    let raw = input.trim();
+    if raw.is_empty() {
+        return Err(AppError::Validation(
+            "Relative path cannot be empty".to_string(),
+        ));
+    }
+
+    let path = PathBuf::from(raw);
+    if path.is_absolute() {
+        return Err(AppError::InvalidPath(
+            "Relative path must not be absolute".to_string(),
+        ));
+    }
+
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(seg) => normalized.push(seg),
+            Component::CurDir => {}
+            _ => {
+                return Err(AppError::InvalidPath(
+                    "Relative path must not contain path traversal".to_string(),
+                ));
+            }
+        }
+    }
+
+    if normalized.as_os_str().is_empty() {
+        return Err(AppError::Validation(
+            "Relative path cannot be empty".to_string(),
+        ));
+    }
+
+    Ok(normalized)
+}
+
+fn resolve_skill_child_path(skill_root: &Path, relative_path: &str) -> Result<PathBuf, AppError> {
+    let rel = normalize_relative_path(relative_path)?;
+    Ok(skill_root.join(rel))
+}
+
+fn to_relative_string(skill_root: &Path, child: &Path) -> Option<String> {
+    child
+        .strip_prefix(skill_root)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+}
 
 fn dashboard(app: &tauri::AppHandle) -> Result<DashboardData, AppError> {
     let state = load_state(app)?;
@@ -85,6 +139,104 @@ pub fn read_skill_file(app: tauri::AppHandle, path: String) -> Result<String, Ap
     let skill_file = dir.join("SKILL.md");
     let content = fs::read_to_string(&skill_file)?;
     Ok(content)
+}
+
+#[tauri::command]
+pub fn list_skill_files(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<Vec<SkillFileEntry>, AppError> {
+    let skill_root = PathBuf::from(&path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    if !skill_root.exists() {
+        return Err(AppError::NotFound(format!(
+            "Skill path does not exist: {}",
+            skill_root.display()
+        )));
+    }
+
+    let mut entries = vec![];
+    let mut stack = vec![skill_root.clone()];
+
+    while let Some(dir) = stack.pop() {
+        for child in fs::read_dir(&dir)? {
+            let child = child?;
+            let child_path = child.path();
+
+            let Some(relative) = to_relative_string(&skill_root, &child_path) else {
+                continue;
+            };
+
+            if relative.is_empty() {
+                continue;
+            }
+
+            let file_name = child.file_name();
+            if file_name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+
+            let is_dir = child_path.is_dir();
+            entries.push(SkillFileEntry {
+                relative_path: relative,
+                is_dir,
+            });
+            if is_dir {
+                stack.push(child_path);
+            }
+        }
+    }
+
+    entries.sort_by(|a, b| {
+        a.relative_path
+            .cmp(&b.relative_path)
+            .then_with(|| b.is_dir.cmp(&a.is_dir))
+    });
+
+    Ok(entries)
+}
+
+#[tauri::command]
+pub fn read_skill_entry(
+    app: tauri::AppHandle,
+    path: String,
+    relative_path: String,
+) -> Result<String, AppError> {
+    let skill_root = PathBuf::from(&path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    let target = resolve_skill_child_path(&skill_root, &relative_path)?;
+    if !target.exists() {
+        return Err(AppError::NotFound(format!(
+            "File does not exist: {}",
+            target.display()
+        )));
+    }
+    if !target.is_file() {
+        return Err(AppError::Validation(format!(
+            "Path is not a file: {}",
+            relative_path
+        )));
+    }
+
+    fs::read_to_string(target).map_err(AppError::from)
+}
+
+#[tauri::command]
+pub fn save_skill_entry(
+    app: tauri::AppHandle,
+    request: SaveSkillEntryRequest,
+) -> Result<(), AppError> {
+    let skill_root = PathBuf::from(&request.path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    let target = resolve_skill_child_path(&skill_root, &request.relative_path)?;
+    if let Some(parent) = target.parent() {
+        ensure_dir(parent)?;
+    }
+    fs::write(target, request.content)?;
+    Ok(())
 }
 
 #[tauri::command]

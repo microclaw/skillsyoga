@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AppWindow,
   ExternalLink,
   FolderPlus,
   Plus,
@@ -138,12 +137,16 @@ function App() {
         <Sidebar variant="inset">
           <SidebarHeader>
             <div className="flex items-center gap-3 rounded-md border border-sidebar-border bg-sidebar-accent/30 px-3 py-2">
-              <div className="rounded-md bg-sidebar-primary p-2 text-sidebar-primary-foreground">
-                <AppWindow className="size-4" />
+              <div className="size-7 shrink-0 overflow-hidden rounded-md">
+                <img
+                  src="/skillsyoga-icon.png"
+                  alt="SkillsYoga"
+                  className="size-full object-cover"
+                />
               </div>
               <div>
                 <p className="text-sm font-semibold">SkillsYoga</p>
-                <p className="text-xs text-muted-foreground">Desktop Skill Hub</p>
+                <p className="text-xs text-muted-foreground">DeskTalk Skills Hub</p>
               </div>
             </div>
           </SidebarHeader>

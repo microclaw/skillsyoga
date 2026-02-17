@@ -8,8 +8,9 @@ mod tools;
 
 use commands::{
     delete_custom_tool, delete_skill, get_dashboard_data, install_from_registry,
-    install_skill_from_github, read_skill_file, reorder_tools, reveal_in_finder, save_skill_file,
-    search_skills, set_tool_enabled, upsert_custom_tool,
+    install_skill_from_github, list_skill_files, read_skill_entry, read_skill_file, reorder_tools,
+    reveal_in_finder, save_skill_entry, save_skill_file, search_skills, set_tool_enabled,
+    upsert_custom_tool,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,7 +21,10 @@ pub fn run() {
             get_dashboard_data,
             set_tool_enabled,
             read_skill_file,
+            list_skill_files,
+            read_skill_entry,
             save_skill_file,
+            save_skill_entry,
             delete_skill,
             install_skill_from_github,
             search_skills,
