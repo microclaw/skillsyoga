@@ -44,7 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 type ViewKey = "skills" | "tools" | "marketplace" | "settings";
 
 const NAV_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof Sparkles }> = [
-  { key: "skills", label: "Upgrade Skills", icon: Sparkles },
+  { key: "skills", label: "Skills", icon: Sparkles },
   { key: "marketplace", label: "Find Skills", icon: ShoppingBag },
   { key: "tools", label: "Tools", icon: Wrench },
   { key: "settings", label: "Settings", icon: Settings },
