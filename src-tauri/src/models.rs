@@ -1,0 +1,113 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolInfo {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
+    pub config_path: String,
+    pub skills_path: String,
+    pub detected: bool,
+    pub enabled: bool,
+    pub cli: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub path: String,
+    pub source: String,
+    pub enabled_for: Vec<String>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceInfo {
+    pub id: String,
+    pub name: String,
+    pub repo_url: String,
+    pub description: String,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardStats {
+    pub installed_skills: usize,
+    pub detected_tools: usize,
+    pub enabled_tools: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardData {
+    pub tools: Vec<ToolInfo>,
+    pub skills: Vec<SkillInfo>,
+    pub sources: Vec<SourceInfo>,
+    pub stats: DashboardStats,
+    pub app_data_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AppState {
+    pub tool_toggles: HashMap<String, bool>,
+    pub custom_tools: Vec<CustomToolInput>,
+    #[serde(default)]
+    pub tool_order: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveSkillRequest {
+    pub content: String,
+    pub target_tool_id: String,
+    pub existing_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallSkillRequest {
+    pub repo_url: String,
+    pub skill_path: Option<String>,
+    pub target_tool_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CustomToolInput {
+    pub id: String,
+    pub name: String,
+    pub config_path: String,
+    pub skills_path: String,
+    pub cli: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSkillResult {
+    pub id: String,
+    pub skill_id: String,
+    pub name: String,
+    pub installs: u64,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchSkillsResponse {
+    pub skills: Vec<SearchSkillResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallFromRegistryRequest {
+    pub source: String,
+    pub skill_id: String,
+    pub target_tool_id: String,
+}
