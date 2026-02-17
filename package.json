@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "version:patch": "./inc_patch_version.sh",
+    "version:minor": "./inc_minor_version.sh",
+    "version:major": "./inc_major_version.sh",
+    "release:homebrew": "./scripts/release_homebrew.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

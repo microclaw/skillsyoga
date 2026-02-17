@@ -58,6 +58,31 @@ bun run tauri dev
 - Frontend only: `bun run dev`
 - Build frontend: `bun run build`
 - Rust check: `cd src-tauri && cargo check`
+- Bump patch version: `bun run version:patch`
+- Bump minor version: `bun run version:minor`
+- Bump major version: `bun run version:major`
+
+## Release
+
+Version scripts:
+
+- `./inc_patch_version.sh`
+- `./inc_minor_version.sh`
+- `./inc_major_version.sh`
+
+Homebrew release script:
+
+- `./scripts/release_homebrew.sh`
+
+Environment variables for Homebrew release (as needed):
+
+- `SIGNING_IDENTITY`
+- `NOTARYTOOL_PROFILE` or (`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`)
+- `TAP_REPO` (default: `everettjf/homebrew-tap`)
+- `CASK_PATH` (default: `Casks/skillsyoga.rb`)
+- `SKIP_BUMP=1` to publish current version
+- `SKIP_NOTARIZE=1` to skip notarization
+- `SKIP_CASK_UPDATE=1` to skip tap update
 
 ## Usage
 

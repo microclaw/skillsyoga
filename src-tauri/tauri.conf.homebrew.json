@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "Developer ID Application: YOUR_NAME (TEAMID)",
+      "entitlements": "./Entitlements.Homebrew.plist",
+      "files": null
+    }
+  }
+}
