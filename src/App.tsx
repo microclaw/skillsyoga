@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AppWindow,
+  ExternalLink,
   FolderPlus,
   Plus,
   RefreshCw,
@@ -12,12 +13,7 @@ import {
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { useDashboard } from "@/hooks/use-dashboard";
-import {
-  deleteCustomTool,
-  reorderTools,
-  setToolEnabled,
-  upsertCustomTool,
-} from "@/lib/api";
+import { deleteCustomTool, reorderTools, setToolEnabled, upsertCustomTool } from "@/lib/api";
 import type { SkillInfo, ToolInfo } from "@/types/models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,13 +39,14 @@ import { MarketplaceView } from "@/views/MarketplaceView";
 import { SettingsView } from "@/views/SettingsView";
 import { SkillEditorDialog } from "@/components/SkillEditorDialog";
 import { CustomToolDialog } from "@/components/CustomToolDialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type ViewKey = "skills" | "tools" | "marketplace" | "settings";
 
 const NAV_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof Sparkles }> = [
-  { key: "skills", label: "Skills", icon: Sparkles },
+  { key: "skills", label: "Upgrade Skills", icon: Sparkles },
+  { key: "marketplace", label: "Find Skills", icon: ShoppingBag },
   { key: "tools", label: "Tools", icon: Wrench },
-  { key: "marketplace", label: "Marketplace", icon: ShoppingBag },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -65,9 +62,18 @@ function App() {
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<SkillEditorState>({ open: false, mode: "create" });
   const [customToolOpen, setCustomToolOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [appVersion, setAppVersion] = useState(__APP_VERSION__);
 
   useEffect(() => {
-    document.documentElement.classList.add("dark");
+    void (async () => {
+      try {
+        const { getVersion } = await import("@tauri-apps/api/app");
+        setAppVersion(await getVersion());
+      } catch {
+        setAppVersion(__APP_VERSION__);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -102,18 +108,29 @@ function App() {
     });
   }, [data, search]);
 
-  const onToggleTool = useCallback(async (tool: ToolInfo, enabled: boolean) => {
-    try {
-      await setToolEnabled(tool.id, enabled);
-      toast.success(`${tool.name} is now ${enabled ? "enabled" : "disabled"}`);
-      await refresh();
-    } catch (error) {
-      toast.error(`Failed to update tool: ${String(error)}`);
-    }
-  }, [refresh]);
+  const onToggleTool = useCallback(
+    async (tool: ToolInfo, enabled: boolean) => {
+      try {
+        await setToolEnabled(tool.id, enabled);
+        toast.success(`${tool.name} is now ${enabled ? "enabled" : "disabled"}`);
+        await refresh();
+      } catch (error) {
+        toast.error(`Failed to update tool: ${String(error)}`);
+      }
+    },
+    [refresh],
+  );
 
-  const searchPlaceholder =
-    view === "skills" ? "Search skills" : view === "tools" ? "Search tools" : null;
+  const openExternal = useCallback(async (url: string) => {
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  }, []);
+
+  const searchPlaceholder = view === "skills" ? "Search skills" : view === "tools" ? "Search tools" : null;
 
   return (
     <div className="dark min-h-screen bg-background text-foreground">
@@ -155,9 +172,13 @@ function App() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
-            <div className="rounded-md border border-sidebar-border px-3 py-2 text-xs text-muted-foreground">
-              Personal workspace · v{__APP_VERSION__}
-            </div>
+            <Button
+              variant="ghost"
+              className="h-8 justify-start rounded-md border border-sidebar-border px-3 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setAboutOpen(true)}
+            >
+              v{appVersion}
+            </Button>
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="min-w-0 overflow-hidden">
@@ -270,6 +291,41 @@ function App() {
           await refresh();
         }}
       />
+
+      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>SkillsYoga</DialogTitle>
+            <DialogDescription>v{appVersion}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => void openExternal("https://skills.yoga")}
+            >
+              Official Website
+              <ExternalLink className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => void openExternal("https://xnu.app")}
+            >
+              XNU Apps
+              <ExternalLink className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-between"
+              onClick={() => void openExternal("https://microclaw.ai")}
+            >
+              MicroClaw
+              <ExternalLink className="size-4" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Toaster position="top-right" richColors />
     </div>

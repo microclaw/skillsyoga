@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Cable, Check, Download, Loader2, Search, Sparkles } from "lucide-react";
+import { Cable, Check, CircleAlert, Download, Loader2, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { installFromRegistry, installSkillFromGithub, searchSkills } from "@/lib/api";
 import type { SearchSkillResult, SourceInfo, ToolInfo } from "@/types/models";
@@ -24,6 +24,7 @@ function formatInstalls(n: number): string {
 }
 
 type InstallPhase = "select" | "installing" | "done" | "error";
+type MarketplaceMode = "discover" | "import";
 
 export function MarketplaceView({
   sources,
@@ -38,6 +39,7 @@ export function MarketplaceView({
   const [skillPath, setSkillPath] = useState("");
   const [targetToolId, setTargetToolId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [mode, setMode] = useState<MarketplaceMode>("discover");
 
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,6 +55,9 @@ export function MarketplaceView({
   const [installError, setInstallError] = useState("");
 
   const toolOptions = tools.filter((tool) => tool.enabled && tool.detected);
+  const detectedCount = tools.filter((tool) => tool.detected).length;
+  const enabledCount = tools.filter((tool) => tool.enabled).length;
+  const installReady = toolOptions.length > 0;
 
   useEffect(() => {
     if (!targetToolId && toolOptions.length > 0) {
@@ -143,64 +148,139 @@ export function MarketplaceView({
 
   return (
     <div className="space-y-5">
-      {/* Search skills.sh */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="size-4" />
-            Find Skills
-          </CardTitle>
-          <CardDescription>Search the skills.sh registry to discover and install skills.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.currentTarget.value)}
-            placeholder="Search skills... (e.g. react, python, testing)"
-          />
-
-          {searching && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" />
-              Searching...
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div className="flex items-start gap-2">
+            {!installReady && <CircleAlert className="mt-0.5 size-4 text-amber-300" />}
+            <div className="text-sm">
+              <p className="font-medium">
+                {installReady
+                  ? `${toolOptions.length} tool(s) ready for install`
+                  : "No install-ready tools found"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {detectedCount} detected · {enabledCount} enabled
+                {!installReady && " · Enable at least one detected tool in Tools"}
+              </p>
             </div>
-          )}
-
-          {!searching && hasSearched && searchResults.length === 0 && (
-            <p className="text-sm text-muted-foreground">No skills found for "{searchQuery}".</p>
-          )}
-
-          {searchResults.length > 0 && (
-            <div className="grid grid-cols-1 gap-2">
-              {searchResults.map((result) => (
-                <div
-                  key={result.id}
-                  className="flex items-center justify-between rounded-md border border-border/70 bg-muted/30 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{result.name}</span>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {formatInstalls(result.installs)} installs
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">{result.source}</div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={toolOptions.length === 0}
-                    onClick={() => openInstallDialog(result)}
-                  >
-                    <Download className="size-3.5" />
-                    Install
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+          </div>
+          <div className="inline-flex items-center rounded-md border border-border p-0.5">
+            <Button
+              variant={mode === "discover" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setMode("discover")}
+            >
+              Discover
+            </Button>
+            <Button
+              variant={mode === "import" ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => setMode("import")}
+            >
+              Import
+            </Button>
+          </div>
         </CardContent>
       </Card>
+
+      {mode === "discover" && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Search className="size-4" />
+                Find Skills
+              </CardTitle>
+              <CardDescription>Search the skills.sh registry and install in one click.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Input
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.currentTarget.value)}
+                placeholder="Search skills... (e.g. react, python, testing)"
+              />
+
+              {searching && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  Searching...
+                </div>
+              )}
+
+              {!searching && hasSearched && searchResults.length === 0 && (
+                <p className="text-sm text-muted-foreground">No skills found for "{searchQuery}".</p>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="grid grid-cols-1 gap-2">
+                  {searchResults.map((result) => (
+                    <div
+                      key={result.id}
+                      className="flex items-center justify-between rounded-md border border-border/70 bg-muted/30 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm">{result.name}</span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {formatInstalls(result.installs)} installs
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {result.skillId} · {result.source}
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!installReady}
+                        onClick={() => openInstallDialog(result)}
+                      >
+                        <Download className="size-3.5" />
+                        Install
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Curated Sources</CardTitle>
+              <CardDescription>Select a source to prefill the GitHub import form.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-2">
+              {sources.map((source) => (
+                <button
+                  key={source.id}
+                  type="button"
+                  onClick={() => {
+                    setRepoUrl(source.repoUrl);
+                    setMode("import");
+                  }}
+                  className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/60"
+                >
+                  <div className="mb-1 flex items-center gap-2 font-medium">
+                    <Sparkles className="size-3.5 text-amber-300" />
+                    {source.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{source.description}</div>
+                  {source.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {source.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-[10px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Install dialog */}
       <Dialog open={dialogSkill !== null} onOpenChange={(open) => { if (!open) closeInstallDialog(); }}>
@@ -281,82 +361,84 @@ export function MarketplaceView({
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Curated Sources</CardTitle>
-            <CardDescription>Click any source to prefill the install form.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-2">
-            {sources.map((source) => (
-              <button
-                key={source.id}
-                type="button"
-                onClick={() => setRepoUrl(source.repoUrl)}
-                className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/60"
-              >
-                <div className="mb-1 flex items-center gap-2 font-medium">
-                  <Sparkles className="size-3.5 text-amber-300" />
-                  {source.name}
-                </div>
-                <div className="text-xs text-muted-foreground">{source.description}</div>
-                {source.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {source.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-[10px]">
-                        {tag}
-                      </Badge>
-                    ))}
+      {mode === "import" && (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Curated Sources</CardTitle>
+              <CardDescription>Click any source to prefill the import form.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 gap-2">
+              {sources.map((source) => (
+                <button
+                  key={source.id}
+                  type="button"
+                  onClick={() => setRepoUrl(source.repoUrl)}
+                  className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-left text-sm hover:bg-muted/60"
+                >
+                  <div className="mb-1 flex items-center gap-2 font-medium">
+                    <Sparkles className="size-3.5 text-amber-300" />
+                    {source.name}
                   </div>
-                )}
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+                  <div className="text-xs text-muted-foreground">{source.description}</div>
+                  {source.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {source.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-[10px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </button>
+              ))}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Install From URL</CardTitle>
-            <CardDescription>Import one skill folder from a GitHub repository.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1">
-              <Label>Repository URL</Label>
-              <Input value={repoUrl} onChange={(event) => setRepoUrl(event.currentTarget.value)} placeholder="https://github.com/org/repo" />
-            </div>
-            <div className="space-y-1">
-              <Label>Skill Path (Optional)</Label>
-              <Input
-                value={skillPath}
-                onChange={(event) => setSkillPath(event.currentTarget.value)}
-                placeholder="skills/skill-name"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Target Tool</Label>
-              <Select value={targetToolId} onValueChange={setTargetToolId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a tool" />
-                </SelectTrigger>
-                <SelectContent>
-                  {toolOptions.map((tool) => (
-                    <SelectItem key={tool.id} value={tool.id}>
-                      {tool.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {toolOptions.length === 0 && (
-                <p className="text-xs text-amber-300">Enable and detect at least one tool before installing.</p>
-              )}
-            </div>
-            <Button disabled={submitting} className="w-full" onClick={() => void onSubmit()}>
-              <Cable className="size-4" />
-              {submitting ? "Installing..." : "Install From GitHub"}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Import from GitHub URL</CardTitle>
+              <CardDescription>Import one skill folder from a GitHub repository.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1">
+                <Label>Repository URL</Label>
+                <Input value={repoUrl} onChange={(event) => setRepoUrl(event.currentTarget.value)} placeholder="https://github.com/org/repo" />
+              </div>
+              <div className="space-y-1">
+                <Label>Skill Path (Optional)</Label>
+                <Input
+                  value={skillPath}
+                  onChange={(event) => setSkillPath(event.currentTarget.value)}
+                  placeholder="skills/skill-name"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Target Tool</Label>
+                <Select value={targetToolId} onValueChange={setTargetToolId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a tool" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {toolOptions.map((tool) => (
+                      <SelectItem key={tool.id} value={tool.id}>
+                        {tool.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!installReady && (
+                  <p className="text-xs text-amber-300">Enable and detect at least one tool before installing.</p>
+                )}
+              </div>
+              <Button disabled={submitting || !installReady} className="w-full" onClick={() => void onSubmit()}>
+                <Cable className="size-4" />
+                {submitting ? "Installing..." : "Install from GitHub"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

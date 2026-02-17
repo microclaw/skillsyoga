@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatDisplayPath } from "@/lib/utils";
 
 export function SettingsView({
   appDataDir,
@@ -29,7 +30,7 @@ export function SettingsView({
         <div>
           <Label>App Data Directory</Label>
           <div className="flex gap-2">
-            <Input value={appDataDir} readOnly />
+            <Input value={formatDisplayPath(appDataDir)} readOnly />
             <Button variant="outline" size="icon" onClick={() => void copyPath()}>
               <Copy className="size-4" />
             </Button>

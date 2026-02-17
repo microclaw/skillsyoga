@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { formatDisplayPath } from "@/lib/utils";
 
 function SortableToolCard({
   tool,
@@ -72,8 +73,8 @@ function SortableToolCard({
               )}
               {tool.cli && <Badge variant="outline" className="text-[10px] leading-none">CLI</Badge>}
             </div>
-            <p className="mt-1.5 truncate text-xs text-muted-foreground">{tool.configPath}</p>
-            <p className="truncate text-xs text-muted-foreground">{tool.skillsPath}</p>
+            <p className="mt-1.5 truncate text-xs text-muted-foreground">{formatDisplayPath(tool.configPath)}</p>
+            <p className="truncate text-xs text-muted-foreground">{formatDisplayPath(tool.skillsPath)}</p>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
