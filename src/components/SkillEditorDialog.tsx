@@ -35,16 +35,40 @@ description: Describe the skill
 Describe the skill.
 `;
 
-const DEFAULT_DIRS = ["scripts", "references", "assets"];
-
 function sortEntries(entries: SkillFileEntry[]): SkillFileEntry[] {
-  return [...entries].sort((a, b) => {
-    const depthA = a.relativePath.split("/").length;
-    const depthB = b.relativePath.split("/").length;
-    if (depthA !== depthB) return depthA - depthB;
-    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-    return a.relativePath.localeCompare(b.relativePath);
-  });
+  const byParent = new Map<string, SkillFileEntry[]>();
+  const normalizeParent = (path: string) => {
+    const idx = path.lastIndexOf("/");
+    return idx === -1 ? "" : path.slice(0, idx);
+  };
+  const basename = (path: string) => {
+    const idx = path.lastIndexOf("/");
+    return idx === -1 ? path : path.slice(idx + 1);
+  };
+
+  for (const entry of entries) {
+    const parent = normalizeParent(entry.relativePath);
+    const list = byParent.get(parent) ?? [];
+    list.push(entry);
+    byParent.set(parent, list);
+  }
+
+  const result: SkillFileEntry[] = [];
+  const walk = (parent: string) => {
+    const children = (byParent.get(parent) ?? []).sort((a, b) => {
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      return basename(a.relativePath).localeCompare(basename(b.relativePath));
+    });
+    for (const child of children) {
+      result.push(child);
+      if (child.isDir) {
+        walk(child.relativePath);
+      }
+    }
+  };
+
+  walk("");
+  return result;
 }
 
 function normalizeRelativePath(input: string): string | null {
@@ -55,10 +79,7 @@ function normalizeRelativePath(input: string): string | null {
 }
 
 function createDefaultEntries(): SkillFileEntry[] {
-  return sortEntries([
-    { relativePath: "SKILL.md", isDir: false },
-    ...DEFAULT_DIRS.map((d) => ({ relativePath: d, isDir: true })),
-  ]);
+  return [{ relativePath: "SKILL.md", isDir: false }];
 }
 
 export function SkillEditorDialog({
@@ -98,14 +119,7 @@ export function SkillEditorDialog({
       void (async () => {
         try {
           const files = await listSkillFiles(skill.path);
-          const normalized = sortEntries(files);
-          const withDefaults = [...normalized];
-          for (const dir of DEFAULT_DIRS) {
-            if (!withDefaults.some((e) => e.relativePath === dir && e.isDir)) {
-              withDefaults.push({ relativePath: dir, isDir: true });
-            }
-          }
-          const finalEntries = sortEntries(withDefaults);
+          const finalEntries = sortEntries(files);
           setEntries(finalEntries);
 
           const preferred =

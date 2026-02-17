@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ExternalLink,
   FolderPlus,
   Plus,
   RefreshCw,
@@ -38,7 +37,6 @@ import { MarketplaceView } from "@/views/MarketplaceView";
 import { SettingsView } from "@/views/SettingsView";
 import { SkillEditorDialog } from "@/components/SkillEditorDialog";
 import { CustomToolDialog } from "@/components/CustomToolDialog";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type ViewKey = "skills" | "tools" | "marketplace" | "settings";
 
@@ -61,7 +59,6 @@ function App() {
   const [search, setSearch] = useState("");
   const [editor, setEditor] = useState<SkillEditorState>({ open: false, mode: "create" });
   const [customToolOpen, setCustomToolOpen] = useState(false);
-  const [aboutOpen, setAboutOpen] = useState(false);
   const [appVersion, setAppVersion] = useState(__APP_VERSION__);
 
   useEffect(() => {
@@ -120,15 +117,6 @@ function App() {
     [refresh],
   );
 
-  const openExternal = useCallback(async (url: string) => {
-    try {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(url);
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    }
-  }, []);
-
   const searchPlaceholder = view === "skills" ? "Search skills" : view === "tools" ? "Search tools" : null;
 
   return (
@@ -175,13 +163,9 @@ function App() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
-            <Button
-              variant="ghost"
-              className="h-8 justify-start rounded-md border border-sidebar-border px-3 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => setAboutOpen(true)}
-            >
+            <div className="h-8 rounded-md border border-sidebar-border px-3 text-xs leading-8 text-muted-foreground">
               v{appVersion}
-            </Button>
+            </div>
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="min-w-0 overflow-hidden">
@@ -264,8 +248,6 @@ function App() {
             {view === "settings" && data && (
               <SettingsView
                 appDataDir={data.appDataDir}
-                installedSkills={data.stats.installedSkills}
-                enabledTools={data.stats.enabledTools}
               />
             )}
           </main>
@@ -294,41 +276,6 @@ function App() {
           await refresh();
         }}
       />
-
-      <Dialog open={aboutOpen} onOpenChange={setAboutOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>SkillsYoga</DialogTitle>
-            <DialogDescription>v{appVersion}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              onClick={() => void openExternal("https://skills.yoga")}
-            >
-              Official Website
-              <ExternalLink className="size-4" />
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              onClick={() => void openExternal("https://xnu.app")}
-            >
-              XNU Apps
-              <ExternalLink className="size-4" />
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-between"
-              onClick={() => void openExternal("https://microclaw.ai")}
-            >
-              MicroClaw
-              <ExternalLink className="size-4" />
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Toaster position="top-right" richColors />
     </div>
