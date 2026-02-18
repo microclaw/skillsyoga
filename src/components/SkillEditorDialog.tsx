@@ -194,6 +194,42 @@ export function SkillEditorDialog({
     void debugLog(`[SkillEditorDialog] ${payload}`).catch(() => {});
   };
 
+  const emitEditorStyleDiag = (phase: string, view: EditorView) => {
+    const pick = (el: Element | null) => {
+      if (!(el instanceof HTMLElement)) return null;
+      const cs = window.getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return {
+        display: cs.display,
+        position: cs.position,
+        overflow: cs.overflow,
+        whiteSpace: cs.whiteSpace,
+        backgroundColor: cs.backgroundColor,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+
+    const editor = view.dom.querySelector(".cm-editor");
+    const scroller = view.dom.querySelector(".cm-scroller");
+    const content = view.dom.querySelector(".cm-content");
+    const line = view.dom.querySelector(".cm-line");
+    const gutters = view.dom.querySelector(".cm-gutters");
+    const selectionLayer = view.dom.querySelector(".cm-selectionLayer");
+    const selectionBg = view.dom.querySelector(".cm-selectionBackground");
+
+    emitDiag("editor_style_diag", {
+      phase,
+      editor: pick(editor),
+      scroller: pick(scroller),
+      content: pick(content),
+      line: pick(line),
+      gutters: pick(gutters),
+      selectionLayer: pick(selectionLayer),
+      selectionBackground: pick(selectionBg),
+    });
+  };
+
   useEffect(() => {
     if (!open) {
       return;
@@ -1054,6 +1090,13 @@ export function SkillEditorDialog({
                         lineTextFillColor: lineStyle?.getPropertyValue("-webkit-text-fill-color") ?? null,
                         lineOpacity: lineStyle?.opacity ?? null,
                       });
+                      emitEditorStyleDiag("create_immediate", view);
+                      window.requestAnimationFrame(() => {
+                        emitEditorStyleDiag("create_raf", view);
+                      });
+                      window.setTimeout(() => {
+                        emitEditorStyleDiag("create_200ms", view);
+                      }, 200);
                     }}
                     onChange={(value, viewUpdate) => {
                         const isUserEdit = viewUpdate.transactions.some((transaction) => {

@@ -87,9 +87,23 @@
 
 /* Keep CodeMirror readable in packaged WebKit builds even if theme injection fails. */
 .skillsyoga-cm .cm-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  overflow: hidden;
   background: #0b0f14;
   color: #e6edf3;
+}
+
+.skillsyoga-cm .cm-scroller {
+  position: relative;
+  display: flex !important;
+  align-items: flex-start !important;
+  height: 100%;
+  overflow: auto !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  line-height: 1.5;
 }
 
 .skillsyoga-cm .cm-scroller,
@@ -100,6 +114,22 @@
   opacity: 1 !important;
 }
 
+.skillsyoga-cm .cm-content {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  flex: 1 0 auto;
+  min-height: 100%;
+  margin: 0;
+  padding: 4px 0;
+  white-space: pre;
+}
+
+.skillsyoga-cm .cm-line {
+  display: block;
+  padding: 0 8px;
+}
+
 .skillsyoga-cm .cm-content * {
   color: inherit !important;
   -webkit-text-fill-color: inherit !important;
@@ -107,15 +137,37 @@
   mix-blend-mode: normal !important;
 }
 
+.skillsyoga-cm .cm-selectionLayer,
+.skillsyoga-cm .cm-cursorLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.skillsyoga-cm .cm-selectionBackground {
+  position: absolute;
+}
+
 .skillsyoga-cm .cm-cursor,
 .skillsyoga-cm .cm-dropCursor {
+  position: absolute;
   border-left-color: #e6edf3 !important;
 }
 
 .skillsyoga-cm .cm-gutters {
+  position: sticky;
+  left: 0;
+  flex: 0 0 auto;
+  box-sizing: border-box;
   background: #0b0f14;
   color: #8b949e;
   border-right: 1px solid rgba(230, 237, 243, 0.12);
+}
+
+.skillsyoga-cm .cm-gutterElement {
+  box-sizing: border-box;
+  min-width: 2ch;
+  padding: 0 8px 0 10px;
 }
 
 .skillsyoga-cm .cm-activeLine,
