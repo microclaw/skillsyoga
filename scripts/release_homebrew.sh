@@ -206,7 +206,6 @@ fi
 
 if [ "$DID_BUMP" -eq 1 ]; then
   git add "${VERSION_FILES[@]}"
-  git add .
   git commit -m "new version: $VERSION"
   git push
   git tag "$TAG"
@@ -265,6 +264,11 @@ EOF
     git push origin main
   fi
 fi
+
+git add .
+git commit -m "released"
+git push
+
 
 RELEASE_DONE=1
 echo "Done. Released $TAG"

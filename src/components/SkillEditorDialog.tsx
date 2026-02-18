@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
-import Editor from "@monaco-editor/react";
-import type { editor as MonacoEditor } from "monaco-editor";
+import { useEffect, useRef, useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { markdown } from "@codemirror/lang-markdown";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorView } from "@codemirror/view";
 import {
   BadgeCheck,
   ChevronDown,
@@ -177,7 +179,7 @@ export function SkillEditorDialog({
   const [creatingGist, setCreatingGist] = useState(false);
   const [editorUiMode, setEditorUiMode] = useState<"view" | "edit">("view");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [editorInstance, setEditorInstance] = useState<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const editorViewRef = useRef<EditorView | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -725,10 +727,14 @@ export function SkillEditorDialog({
     if (mode !== "edit" || !skill) {
       return;
     }
-    const selection = editorInstance?.getSelection();
-    const model = editorInstance?.getModel();
-    const selectedText = selection && model ? model.getValueInRange(selection) : "";
-    const fullText = model?.getValue() ?? "";
+    const editorState = editorViewRef.current?.state;
+    const fullText = editorState?.doc.toString() ?? "";
+    const selectedText = editorState
+      ? editorState.selection.ranges
+        .filter((range) => !range.empty)
+        .map((range) => editorState.doc.sliceString(range.from, range.to))
+        .join("\n")
+      : "";
     if (!selectedText.trim()) {
       window.alert("Please select text before creating a gist.");
       return;
@@ -975,16 +981,22 @@ export function SkillEditorDialog({
                 {loadingFile ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading file...</div>
                 ) : (
-                  <Editor
-                    height="100%"
-                    language="markdown"
+                  <CodeMirror
                     value={selectedContent}
-                    onMount={(editor) => {
-                      setEditorInstance(editor);
-                      requestAnimationFrame(() => editor.layout());
+                    height="100%"
+                    theme={oneDark}
+                    editable={!isReadOnly}
+                    readOnly={isReadOnly}
+                    extensions={[markdown(), EditorView.lineWrapping]}
+                    basicSetup={{
+                      foldGutter: false,
+                      dropCursor: false,
                     }}
-                    onChange={(value) =>
-                      {
+                    className="h-full text-sm"
+                    onCreateEditor={(view) => {
+                      editorViewRef.current = view;
+                    }}
+                    onChange={(value) => {
                         if (isReadOnly) return;
                         const nextValue = value ?? "";
                         setContentByFile((prev) => ({
@@ -998,15 +1010,7 @@ export function SkillEditorDialog({
                           else next.delete(selectedFile);
                           return next;
                         });
-                      }
-                    }
-                    theme="vs-dark"
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 13,
-                      wordWrap: "on",
-                      readOnly: isReadOnly,
-                    }}
+                      }}
                   />
                 )}
               </div>
