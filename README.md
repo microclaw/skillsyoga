@@ -42,7 +42,7 @@ You can create, edit, organize, and import skills without manually switching bet
 - Tauri 2 (Rust backend)
 - React 19 + TypeScript + Vite frontend
 - Tailwind CSS v4 + Radix UI / shadcn-ui
-- Monaco Editor for markdown editing
+- CodeMirror for markdown editing
 
 ## Quick Start
 
