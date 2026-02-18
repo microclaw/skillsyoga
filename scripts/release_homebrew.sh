@@ -5,7 +5,7 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 REPO_DIR="$ROOT_DIR"
 TAURI_HOMEBREW_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.json"
 TMP_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.generated.json"
-VERSION_FILES=("package.json" "src-tauri/Cargo.toml" "src-tauri/tauri.conf.json")
+VERSION_FILES=("package.json" "src-tauri/Cargo.toml" "src-tauri/tauri.conf.json" "src-tauri/Cargo.lock")
 
 APP_NAME="${APP_NAME:-SkillsYoga}"
 APP_SLUG="${APP_SLUG:-skillsyoga}"

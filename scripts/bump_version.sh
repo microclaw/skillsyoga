@@ -21,6 +21,7 @@ VERSION_FILES=(
   "$ROOT_DIR/package.json"
   "$ROOT_DIR/src-tauri/Cargo.toml"
   "$ROOT_DIR/src-tauri/tauri.conf.json"
+  "$ROOT_DIR/src-tauri/Cargo.lock"
 )
 
 read_package_version() {
@@ -90,6 +91,9 @@ fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
 
 sed -i '' "s/^version = \"$OLD_VERSION\"/version = \"$NEW_VERSION\"/" "$ROOT_DIR/src-tauri/Cargo.toml"
 sed -i '' "s/\"version\": \"$OLD_VERSION\"/\"version\": \"$NEW_VERSION\"/" "$ROOT_DIR/src-tauri/tauri.conf.json"
+if [ -f "$ROOT_DIR/src-tauri/Cargo.lock" ]; then
+  sed -i '' "/name = \"SkillsYoga\"/{n;s/version = \"$OLD_VERSION\"/version = \"$NEW_VERSION\"/;}" "$ROOT_DIR/src-tauri/Cargo.lock"
+fi
 
 if [ "$NO_GIT" = "1" ]; then
   echo "NO_GIT=1, skipped commit/tag/push"
