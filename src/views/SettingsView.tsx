@@ -67,21 +67,25 @@ export function SettingsView({
           <CardDescription>Project links and author profile.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
-          <Button variant="outline" className="w-full justify-between" onClick={() => void openExternal("https://skills.yoga")}>
-            Official website
-            <ExternalLink className="size-4" />
+          <Button variant="outline" className="w-full justify-start gap-3" onClick={() => void openExternal("https://skills.yoga")}>
+            <span>Official website</span>
+            <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">https://skills.yoga</span>
+            <ExternalLink className="size-4 shrink-0" />
           </Button>
-          <Button variant="outline" className="w-full justify-between" onClick={() => void openExternal("https://github.com/microclaw/skillsyoga")}>
-            Open Source
-            <ExternalLink className="size-4" />
+          <Button variant="outline" className="w-full justify-start gap-3" onClick={() => void openExternal("https://github.com/microclaw/skillsyoga")}>
+            <span>Open Source</span>
+            <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">https://github.com/microclaw/skillsyoga</span>
+            <ExternalLink className="size-4 shrink-0" />
           </Button>
-          <Button variant="outline" className="w-full justify-between" onClick={() => void openExternal("https://x.com/everettjf")}>
-            Author
-            <ExternalLink className="size-4" />
+          <Button variant="outline" className="w-full justify-start gap-3" onClick={() => void openExternal("https://x.com/everettjf")}>
+            <span>Author</span>
+            <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">https://x.com/everettjf</span>
+            <ExternalLink className="size-4 shrink-0" />
           </Button>
-          <Button variant="outline" className="w-full justify-between" onClick={() => void openExternal("https://xnu.app")}>
-            More Apps
-            <ExternalLink className="size-4" />
+          <Button variant="outline" className="w-full justify-start gap-3" onClick={() => void openExternal("https://xnu.app")}>
+            <span>More Apps</span>
+            <span className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">https://xnu.app</span>
+            <ExternalLink className="size-4 shrink-0" />
           </Button>
         </CardContent>
       </Card>

@@ -134,7 +134,7 @@ function App() {
               </div>
               <div>
                 <p className="text-sm font-semibold">SkillsYoga</p>
-                <p className="text-xs text-muted-foreground">DeskTalk Skills Hub</p>
+                <p className="text-xs text-muted-foreground">Skills Desktop Manager</p>
               </div>
             </div>
           </SidebarHeader>

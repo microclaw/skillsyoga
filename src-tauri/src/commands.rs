@@ -240,6 +240,117 @@ pub fn save_skill_entry(
 }
 
 #[tauri::command]
+pub fn create_skill_dir(
+    app: tauri::AppHandle,
+    path: String,
+    relative_path: String,
+) -> Result<(), AppError> {
+    let skill_root = PathBuf::from(&path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    let target = resolve_skill_child_path(&skill_root, &relative_path)?;
+    if target.exists() && !target.is_dir() {
+        return Err(AppError::Validation(format!(
+            "Path exists and is not a directory: {}",
+            relative_path
+        )));
+    }
+    ensure_dir(&target)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rename_skill_entry(
+    app: tauri::AppHandle,
+    path: String,
+    old_relative_path: String,
+    new_relative_path: String,
+) -> Result<(), AppError> {
+    let skill_root = PathBuf::from(&path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    let old_target = resolve_skill_child_path(&skill_root, &old_relative_path)?;
+    let new_target = resolve_skill_child_path(&skill_root, &new_relative_path)?;
+
+    if !old_target.exists() {
+        return Err(AppError::NotFound(format!(
+            "Path does not exist: {}",
+            old_relative_path
+        )));
+    }
+    if new_target.exists() {
+        return Err(AppError::Validation(format!(
+            "Target path already exists: {}",
+            new_relative_path
+        )));
+    }
+    if let Some(parent) = new_target.parent() {
+        ensure_dir(parent)?;
+    }
+    fs::rename(old_target, new_target)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_skill_entry(
+    app: tauri::AppHandle,
+    path: String,
+    relative_path: String,
+) -> Result<(), AppError> {
+    let skill_root = PathBuf::from(&path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    let target = resolve_skill_child_path(&skill_root, &relative_path)?;
+    if !target.exists() {
+        return Err(AppError::NotFound(format!(
+            "Path does not exist: {}",
+            relative_path
+        )));
+    }
+    if !target.is_file() {
+        return Err(AppError::Validation(format!(
+            "Path is not a file: {}",
+            relative_path
+        )));
+    }
+    trash::delete(&target).map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_skill_empty_dir(
+    app: tauri::AppHandle,
+    path: String,
+    relative_path: String,
+) -> Result<(), AppError> {
+    let skill_root = PathBuf::from(&path);
+    is_path_under_skills_root(&skill_root, &app)?;
+
+    let target = resolve_skill_child_path(&skill_root, &relative_path)?;
+    if !target.exists() {
+        return Err(AppError::NotFound(format!(
+            "Path does not exist: {}",
+            relative_path
+        )));
+    }
+    if !target.is_dir() {
+        return Err(AppError::Validation(format!(
+            "Path is not a directory: {}",
+            relative_path
+        )));
+    }
+    let mut iter = fs::read_dir(&target)?;
+    if iter.next().is_some() {
+        return Err(AppError::Validation(format!(
+            "Directory is not empty: {}",
+            relative_path
+        )));
+    }
+    trash::delete(&target).map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub fn save_skill_file(
     app: tauri::AppHandle,
     request: SaveSkillRequest,

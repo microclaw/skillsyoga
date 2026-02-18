@@ -7,8 +7,9 @@ mod state;
 mod tools;
 
 use commands::{
-    delete_custom_tool, delete_skill, get_dashboard_data, install_from_registry,
-    install_skill_from_github, list_skill_files, read_skill_entry, read_skill_file, reorder_tools,
+    create_skill_dir, delete_custom_tool, delete_skill, delete_skill_empty_dir,
+    delete_skill_entry, get_dashboard_data, install_from_registry, install_skill_from_github,
+    list_skill_files, read_skill_entry, read_skill_file, rename_skill_entry, reorder_tools,
     reveal_in_finder, save_skill_entry, save_skill_file, search_skills, set_tool_enabled,
     upsert_custom_tool,
 };
@@ -25,6 +26,10 @@ pub fn run() {
             read_skill_entry,
             save_skill_file,
             save_skill_entry,
+            create_skill_dir,
+            rename_skill_entry,
+            delete_skill_entry,
+            delete_skill_empty_dir,
             delete_skill,
             install_skill_from_github,
             search_skills,

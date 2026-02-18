@@ -39,6 +39,22 @@ export async function saveSkillEntry(request: SaveSkillEntryRequest) {
   return invoke<void>("save_skill_entry", { request });
 }
 
+export async function createSkillDir(path: string, relativePath: string) {
+  return invoke<void>("create_skill_dir", { path, relativePath });
+}
+
+export async function renameSkillEntry(path: string, oldRelativePath: string, newRelativePath: string) {
+  return invoke<void>("rename_skill_entry", { path, oldRelativePath, newRelativePath });
+}
+
+export async function deleteSkillEntry(path: string, relativePath: string) {
+  return invoke<void>("delete_skill_entry", { path, relativePath });
+}
+
+export async function deleteSkillEmptyDir(path: string, relativePath: string) {
+  return invoke<void>("delete_skill_empty_dir", { path, relativePath });
+}
+
 export async function deleteSkill(path: string) {
   return invoke<void>("delete_skill", { path });
 }

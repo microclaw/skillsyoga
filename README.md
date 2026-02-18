@@ -4,6 +4,16 @@ A desktop app to manage AI coding tool skills in one place.
 
 SkillsYoga helps you view, create, edit, delete, and import `SKILL.md`-based skills for tools like Cursor, Gemini CLI, and more, without switching between multiple config folders manually.
 
+## Screenshots
+
+| List Skills | List Tools |
+| --- | --- |
+| ![List Skills](screenshots/list-skills.png) | ![List Tools](screenshots/list-tools.png) |
+
+| Find Skills | Edit Skill |
+| --- | --- |
+| ![Find Skills](screenshots/find-skills.png) | ![Edit Skill](screenshots/edit-skills.png) |
+
 ## Why SkillsYoga
 
 - Unified management for multi-tool skill folders
@@ -29,14 +39,6 @@ SkillsYoga helps you view, create, edit, delete, and import `SKILL.md`-based ski
 - Styling: Tailwind CSS v4
 - UI: Radix UI + shadcn/ui
 - Editor: Monaco Editor
-
-## Screenshots
-
-You can place screenshots in `docs/screenshots/` and update links below.
-
-![Skills Page](docs/screenshots/skills.png)
-![Tools Page](docs/screenshots/tools.png)
-![Marketplace Page](docs/screenshots/marketplace.png)
 
 ## Quick Start
 
