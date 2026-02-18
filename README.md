@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://skills.yoga"><img src="https://img.shields.io/badge/Website-skills.yoga-111827?style=flat&logo=googlechrome&logoColor=white" alt="Website" /></a>
   <a href="https://x.com/everettjf"><img src="https://img.shields.io/badge/Twitter-@everettjf-1D9BF0?style=flat&logo=x&logoColor=white" alt="Twitter" /></a>
-  <img src="https://img.shields.io/badge/Discord-Coming%20Soon-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" />
+  <a href="https://discord.gg/eGzEaP6TzR"><img src="https://img.shields.io/badge/Discord-Join%20Server-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="https://github.com/microclaw/skillsyoga/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-22c55e?style=flat" alt="MIT License" /></a>
 </p>
 
