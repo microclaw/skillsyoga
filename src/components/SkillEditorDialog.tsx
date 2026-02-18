@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
+import * as monaco from "monaco-editor";
 import type { editor as MonacoEditor } from "monaco-editor";
 import {
   BadgeCheck,
@@ -76,6 +77,8 @@ description: Describe the skill
 Describe the skill.
 `;
 const STANDARD_FOLDERS = ["scripts", "references", "assets", "prompts"];
+
+loader.config({ monaco });
 
 function sortEntries(entries: SkillFileEntry[]): SkillFileEntry[] {
   const byParent = new Map<string, SkillFileEntry[]>();

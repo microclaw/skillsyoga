@@ -53,7 +53,7 @@ Frontend calls `invoke<T>("command_name", { args })` → Rust command returns `R
 ### Security
 
 - `is_path_under_skills_root()` validates all user-supplied paths (read, write, delete) are under a known tool's skills directory
-- CSP configured in tauri.conf.json (allows blob:/data: for Monaco Editor, unsafe-eval for Monaco workers)
+- CSP is currently disabled (`app.security.csp: null` in Tauri config)
 - GitHub install only accepts `https://github.com/` URLs
 
 ## Key Patterns
