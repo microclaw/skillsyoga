@@ -782,7 +782,7 @@ export function SkillEditorDialog({
           onRequestClose();
         }}
       >
-        <DialogContent className="flex h-[calc(100vh-40px)] w-4/5 max-w-none sm:max-w-none flex-col overflow-hidden p-0">
+        <DialogContent className="fixed inset-5 flex h-auto w-auto max-w-none translate-x-0 translate-y-0 flex-col overflow-hidden p-0 sm:max-w-none">
           <DialogHeader className="shrink-0 px-6 pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -981,6 +981,7 @@ export function SkillEditorDialog({
                     value={selectedContent}
                     onMount={(editor) => {
                       setEditorInstance(editor);
+                      requestAnimationFrame(() => editor.layout());
                     }}
                     onChange={(value) =>
                       {
