@@ -11,7 +11,7 @@ use commands::{
     delete_skill_entry, get_dashboard_data, install_from_registry, install_skill_from_github,
     list_skill_files, read_skill_entry, read_skill_file, rename_skill_entry, reorder_tools,
     reveal_in_finder, save_skill_entry, save_skill_file, search_skills, set_github_token,
-    set_tool_enabled, upsert_custom_tool,
+    set_skill_editor_default_mode, set_tool_enabled, upsert_custom_tool,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -39,6 +39,7 @@ pub fn run() {
             reorder_tools,
             reveal_in_finder,
             set_github_token,
+            set_skill_editor_default_mode,
             create_github_gist
         ])
         .run(tauri::generate_context!())

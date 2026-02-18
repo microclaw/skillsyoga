@@ -95,3 +95,7 @@ export async function setGithubToken(token: string) {
 export async function createGithubGist(request: CreateGitHubGistRequest) {
   return invoke<string>("create_github_gist", { request });
 }
+
+export async function setSkillEditorDefaultMode(mode: "view" | "edit") {
+  return invoke<void>("set_skill_editor_default_mode", { mode });
+}

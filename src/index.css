@@ -77,7 +77,7 @@
   html,
   body,
   #root {
-    @apply min-h-screen;
+    @apply h-screen overflow-hidden overscroll-none;
   }
 
   body {

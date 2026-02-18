@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 
 export function CustomToolDialog({
   open,
@@ -20,7 +19,6 @@ export function CustomToolDialog({
   const [name, setName] = useState("");
   const [configPath, setConfigPath] = useState("~/.tool");
   const [skillsPath, setSkillsPath] = useState("~/.tool/skills");
-  const [cli, setCli] = useState(false);
 
   const submit = async () => {
     if (!id || !name || !skillsPath || !configPath) {
@@ -29,7 +27,7 @@ export function CustomToolDialog({
     }
 
     try {
-      await onSaved({ id, name, configPath, skillsPath, cli });
+      await onSaved({ id, name, configPath, skillsPath, cli: false });
       onOpenChange(false);
       setId("");
       setName("");
@@ -61,10 +59,6 @@ export function CustomToolDialog({
           <div className="space-y-1">
             <Label>Skills Path</Label>
             <Input value={skillsPath} onChange={(event) => setSkillsPath(event.currentTarget.value)} />
-          </div>
-          <div className="flex items-center justify-between rounded-md border border-border p-3">
-            <p className="text-sm">CLI Tool</p>
-            <Switch checked={cli} onCheckedChange={setCli} />
           </div>
           <Button className="w-full" onClick={() => void submit()}>
             Save Tool

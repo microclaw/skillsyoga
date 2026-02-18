@@ -53,9 +53,10 @@ pub struct DashboardData {
     pub stats: DashboardStats,
     pub app_data_dir: String,
     pub has_github_token: bool,
+    pub skill_editor_default_mode: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppState {
     pub tool_toggles: HashMap<String, bool>,
@@ -64,6 +65,24 @@ pub struct AppState {
     pub tool_order: Vec<String>,
     #[serde(default)]
     pub github_token: Option<String>,
+    #[serde(default = "default_skill_editor_default_mode")]
+    pub skill_editor_default_mode: String,
+}
+
+fn default_skill_editor_default_mode() -> String {
+    "view".to_string()
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            tool_toggles: HashMap::new(),
+            custom_tools: vec![],
+            tool_order: vec![],
+            github_token: None,
+            skill_editor_default_mode: default_skill_editor_default_mode(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

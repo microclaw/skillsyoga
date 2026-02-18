@@ -107,6 +107,12 @@ fn dashboard(app: &tauri::AppHandle) -> Result<DashboardData, AppError> {
         enabled_tools: tools.iter().filter(|t| t.enabled).count(),
     };
 
+    let skill_editor_default_mode = if state.skill_editor_default_mode == "edit" {
+        "edit".to_string()
+    } else {
+        "view".to_string()
+    };
+
     Ok(DashboardData {
         tools,
         skills,
@@ -117,6 +123,7 @@ fn dashboard(app: &tauri::AppHandle) -> Result<DashboardData, AppError> {
             .github_token
             .as_ref()
             .is_some_and(|token| !token.trim().is_empty()),
+        skill_editor_default_mode,
     })
 }
 
@@ -653,6 +660,19 @@ pub fn set_github_token(app: tauri::AppHandle, token: String) -> Result<(), AppE
     } else {
         Some(cleaned)
     };
+    save_state(&app, &state)
+}
+
+#[tauri::command]
+pub fn set_skill_editor_default_mode(app: tauri::AppHandle, mode: String) -> Result<(), AppError> {
+    let clean = mode.trim().to_lowercase();
+    if clean != "view" && clean != "edit" {
+        return Err(AppError::Validation(
+            "Mode must be either 'view' or 'edit'".to_string(),
+        ));
+    }
+    let mut state = load_state(&app)?;
+    state.skill_editor_default_mode = clean;
     save_state(&app, &state)
 }
 

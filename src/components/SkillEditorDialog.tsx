@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,6 +46,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog,
@@ -128,6 +136,7 @@ export function SkillEditorDialog({
   skill,
   tools,
   hasGithubToken,
+  defaultEditorMode,
   onOpenChange,
   onSaved,
 }: {
@@ -136,6 +145,7 @@ export function SkillEditorDialog({
   skill?: SkillInfo;
   tools: ToolInfo[];
   hasGithubToken: boolean;
+  defaultEditorMode: "view" | "edit";
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
@@ -150,17 +160,22 @@ export function SkillEditorDialog({
   });
   const [dirtyFiles, setDirtyFiles] = useState<Set<string>>(new Set());
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<{
-    entry: SkillFileEntry;
-    x: number;
-    y: number;
-    hasChildren: boolean;
-  } | null>(null);
   const [pendingEntry, setPendingEntry] = useState<SkillFileEntry | null>(null);
   const [unsavedSwitchOpen, setUnsavedSwitchOpen] = useState(false);
+  const [unsavedCloseOpen, setUnsavedCloseOpen] = useState(false);
+  const [createEntryDialogOpen, setCreateEntryDialogOpen] = useState(false);
+  const [createEntryType, setCreateEntryType] = useState<"markdown" | "folder">("markdown");
+  const [createEntryBaseDir, setCreateEntryBaseDir] = useState<string>("");
+  const [createEntryValue, setCreateEntryValue] = useState("");
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<SkillFileEntry | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteEntryDialogOpen, setDeleteEntryDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SkillFileEntry | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
   const [saving, setSaving] = useState(false);
   const [creatingGist, setCreatingGist] = useState(false);
+  const [editorUiMode, setEditorUiMode] = useState<"view" | "edit">("view");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [editorInstance, setEditorInstance] = useState<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
@@ -205,10 +220,15 @@ export function SkillEditorDialog({
   }, [mode, open, skill, tools]);
 
   useEffect(() => {
-    const onWindowClick = () => setContextMenu(null);
-    window.addEventListener("click", onWindowClick);
-    return () => window.removeEventListener("click", onWindowClick);
-  }, []);
+    if (!open) return;
+    if (mode === "edit") {
+      setEditorUiMode(defaultEditorMode);
+    } else {
+      setEditorUiMode("edit");
+    }
+  }, [defaultEditorMode, mode, open]);
+
+  const isReadOnly = mode === "edit" && editorUiMode === "view";
 
   const isHiddenByCollapsedParent = (relativePath: string) => {
     const parts = relativePath.split("/");
@@ -332,14 +352,55 @@ export function SkillEditorDialog({
     await switchToEntry(target);
   };
 
-  const createFolder = async (folderPath: string) => {
+  const hasCreateDraftChanges = () => {
+    if (dirtyFiles.size > 0) return true;
+    if (entries.length !== 1) return true;
+    return !(entries[0]?.relativePath === "SKILL.md" && entries[0]?.isDir === false);
+  };
+
+  const hasUnsavedForClose = () => {
+    if (mode === "edit") {
+      return dirtyFiles.size > 0;
+    }
+    return hasCreateDraftChanges();
+  };
+
+  const onRequestClose = () => {
+    if (hasUnsavedForClose()) {
+      setUnsavedCloseOpen(true);
+      return;
+    }
+    onOpenChange(false);
+  };
+
+  const onUnsavedSaveAndClose = async () => {
+    if (mode === "edit") {
+      const ok = await saveCurrentFile();
+      if (!ok) return;
+      setUnsavedCloseOpen(false);
+      onOpenChange(false);
+      return;
+    }
+
+    await submit();
+    setUnsavedCloseOpen(false);
+  };
+
+  const onUnsavedDiscardAndClose = () => {
+    setUnsavedCloseOpen(false);
+    onOpenChange(false);
+  };
+
+  const createFolder = async (folderPath: string, options?: { quietIfExists?: boolean }) => {
     const normalized = normalizeRelativePath(folderPath);
     if (!normalized) {
       toast.error("Invalid folder path");
       return;
     }
     if (entries.some((entry) => entry.relativePath === normalized && entry.isDir)) {
-      toast.error("Folder already exists");
+      if (!options?.quietIfExists) {
+        toast.error("Folder already exists");
+      }
       return;
     }
     const parts = normalized.split("/");
@@ -361,50 +422,67 @@ export function SkillEditorDialog({
     }
   };
 
-  const onAddFolder = async () => {
-    const input = window.prompt("New folder path relative to this skill", "scripts");
-    if (!input) return;
-    await createFolder(input);
-  };
-
-  const onAddMarkdownAt = (baseDir?: string) => {
-    const defaultPath = baseDir ? `${baseDir}/new-note.md` : "references/REFERENCE.md";
-    const input = window.prompt("New markdown file path relative to this skill", defaultPath);
-    if (!input) return;
-    const relative = ensureMarkdownPath(input);
+  const createMarkdownEntry = async (inputPath: string) => {
+    const relative = ensureMarkdownPath(inputPath);
     if (!relative) {
       toast.error("Invalid markdown path");
       return;
     }
     const parent = relative.includes("/") ? relative.slice(0, relative.lastIndexOf("/")) : "";
-    void (async () => {
-      if (parent) {
-        await createFolder(parent);
+    if (parent) {
+      await createFolder(parent, { quietIfExists: true });
+    }
+    const parts = relative.split("/");
+    const nextEntries = [...entries];
+    if (nextEntries.some((entry) => entry.relativePath === relative && !entry.isDir)) {
+      toast.error("File already exists");
+      return;
+    }
+    for (let i = 1; i < parts.length; i += 1) {
+      const dir = parts.slice(0, i).join("/");
+      if (!nextEntries.some((entry) => entry.relativePath === dir && entry.isDir)) {
+        nextEntries.push({ relativePath: dir, isDir: true });
       }
-      const parts = relative.split("/");
-      const nextEntries = [...entries];
-      if (nextEntries.some((entry) => entry.relativePath === relative && !entry.isDir)) {
-        toast.error("File already exists");
-        return;
-      }
-      for (let i = 1; i < parts.length; i += 1) {
-        const dir = parts.slice(0, i).join("/");
-        if (!nextEntries.some((entry) => entry.relativePath === dir && entry.isDir)) {
-          nextEntries.push({ relativePath: dir, isDir: true });
-        }
-      }
-      nextEntries.push({ relativePath: relative, isDir: false });
-      setEntries(sortEntries(nextEntries));
-      setContentByFile((prev) => ({ ...prev, [relative]: prev[relative] ?? "" }));
-      setSavedByFile((prev) => ({ ...prev, [relative]: prev[relative] ?? "" }));
-      setSelectedFile(relative);
-    })();
+    }
+    nextEntries.push({ relativePath: relative, isDir: false });
+    setEntries(sortEntries(nextEntries));
+    setContentByFile((prev) => ({ ...prev, [relative]: prev[relative] ?? "" }));
+    setSavedByFile((prev) => ({ ...prev, [relative]: prev[relative] ?? "" }));
+    setSelectedFile(relative);
   };
 
-  const renameEntry = async (entry: SkillFileEntry) => {
+  const openCreateEntryDialog = (type: "markdown" | "folder", baseDir?: string) => {
+    const safeBaseDir = baseDir ?? "";
+    setCreateEntryType(type);
+    setCreateEntryBaseDir(safeBaseDir);
+    if (type === "markdown") {
+      setCreateEntryValue(safeBaseDir ? `${safeBaseDir}/new-note.md` : "references/REFERENCE.md");
+    } else {
+      setCreateEntryValue(safeBaseDir ? `${safeBaseDir}/new-folder` : "scripts");
+    }
+    setCreateEntryDialogOpen(true);
+  };
+
+  const confirmCreateEntry = async () => {
+    const value = createEntryValue.trim();
+    if (!value) {
+      toast.error("Path is required");
+      return;
+    }
+    if (createEntryType === "folder") {
+      await createFolder(value);
+    } else {
+      await createMarkdownEntry(value);
+    }
+    setCreateEntryDialogOpen(false);
+    setCreateEntryValue("");
+    setCreateEntryBaseDir("");
+  };
+
+  const renameEntry = async (entry: SkillFileEntry, nextNameRaw: string) => {
     const parts = entry.relativePath.split("/");
     const oldName = parts[parts.length - 1] ?? entry.relativePath;
-    const nextName = window.prompt("Rename", oldName)?.trim();
+    const nextName = nextNameRaw.trim();
     if (!nextName || nextName === oldName) return;
     const parent = parts.slice(0, -1).join("/");
     const newRelative = parent ? `${parent}/${nextName}` : nextName;
@@ -460,14 +538,29 @@ export function SkillEditorDialog({
     setSelectedFile((prev) => remap(prev));
   };
 
+  const requestRenameEntry = (entry: SkillFileEntry) => {
+    const parts = entry.relativePath.split("/");
+    const oldName = parts[parts.length - 1] ?? entry.relativePath;
+    setRenameTarget(entry);
+    setRenameValue(oldName);
+    setRenameDialogOpen(true);
+  };
+
+  const confirmRenameEntry = async () => {
+    if (!renameTarget) return;
+    await renameEntry(renameTarget, renameValue);
+    setRenameDialogOpen(false);
+    setRenameTarget(null);
+    setRenameValue("");
+  };
+
   const deleteFile = async (entry: SkillFileEntry) => {
-    if (!window.confirm(`Move ${entry.relativePath} to Trash?`)) return;
     if (mode === "edit" && skill?.path) {
       try {
         await deleteSkillEntry(skill.path, entry.relativePath);
       } catch (error) {
         toast.error(`Delete failed: ${String(error)}`);
-        return;
+        return false;
       }
     }
     setEntries((prev) => prev.filter((e) => e.relativePath !== entry.relativePath));
@@ -491,18 +584,18 @@ export function SkillEditorDialog({
       setSelectedFile(firstFile);
       void loadFile(firstFile);
     }
+    return true;
   };
 
   const deleteEmptyFolder = async (entry: SkillFileEntry) => {
     const hasChildren = entries.some((e) => e.relativePath.startsWith(`${entry.relativePath}/`));
-    if (hasChildren) return;
-    if (!window.confirm(`Move empty folder ${entry.relativePath} to Trash?`)) return;
+    if (hasChildren) return false;
     if (mode === "edit" && skill?.path) {
       try {
         await deleteSkillEmptyDir(skill.path, entry.relativePath);
       } catch (error) {
         toast.error(`Delete failed: ${String(error)}`);
-        return;
+        return false;
       }
     }
     setEntries((prev) => prev.filter((e) => e.relativePath !== entry.relativePath));
@@ -511,6 +604,25 @@ export function SkillEditorDialog({
       next.delete(entry.relativePath);
       return next;
     });
+    return true;
+  };
+
+  const requestDeleteEntry = (entry: SkillFileEntry) => {
+    setDeleteTarget(entry);
+    setDeleteEntryDialogOpen(true);
+  };
+
+  const confirmDeleteEntry = async () => {
+    if (!deleteTarget) return;
+    let ok = false;
+    if (deleteTarget.isDir) {
+      ok = await deleteEmptyFolder(deleteTarget);
+    } else {
+      ok = await deleteFile(deleteTarget);
+    }
+    if (!ok) return;
+    setDeleteEntryDialogOpen(false);
+    setDeleteTarget(null);
   };
 
   const submit = async () => {
@@ -592,19 +704,37 @@ export function SkillEditorDialog({
     }
   };
 
+  const toAbsoluteEntryPath = (relativePath: string): string | null => {
+    if (!skill?.path || mode !== "edit") return null;
+    const sep = skill.path.includes("\\") ? "\\" : "/";
+    const root = skill.path.replace(/[\\/]+$/, "");
+    return `${root}${sep}${relativePath.split("/").join(sep)}`;
+  };
+
+  const onRevealEntry = async (entry: SkillFileEntry) => {
+    const absolutePath = toAbsoluteEntryPath(entry.relativePath);
+    if (!absolutePath) return;
+    try {
+      await revealInFinder(absolutePath);
+    } catch (error) {
+      toast.error(`Failed to reveal: ${String(error)}`);
+    }
+  };
+
   const onCreateGist = async () => {
     if (mode !== "edit" || !skill) {
-      return;
-    }
-    if (!hasGithubToken) {
-      window.alert("Please set GitHub Token in Settings.");
       return;
     }
     const selection = editorInstance?.getSelection();
     const model = editorInstance?.getModel();
     const selectedText = selection && model ? model.getValueInRange(selection) : "";
+    const fullText = model?.getValue() ?? "";
     if (!selectedText.trim()) {
-      toast.error("Please select text in the editor first");
+      window.alert("Please select text before creating a gist.");
+      return;
+    }
+    if (fullText.trim() && selectedText.trim() === fullText.trim()) {
+      window.alert("Please select only part of the text.");
       return;
     }
 
@@ -636,16 +766,42 @@ export function SkillEditorDialog({
   };
 
   const selectedContent = contentByFile[selectedFile] ?? "";
+  const modeLabel = editorUiMode === "view" ? "View" : "Edit";
+  const headerTitle = mode === "edit" ? `${modeLabel} Skill` : "Create Skill";
+  const fileStatusLabel = mode === "edit" ? `${editorUiMode === "view" ? "Viewing" : "Editing"} ${selectedFile}` : "";
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            onOpenChange(true);
+            return;
+          }
+          onRequestClose();
+        }}
+      >
         <DialogContent className="flex h-[calc(100vh-40px)] w-4/5 max-w-none sm:max-w-none flex-col overflow-hidden p-0">
           <DialogHeader className="shrink-0 px-6 pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <DialogTitle>{mode === "edit" ? "Edit Skill" : "Create Skill"}</DialogTitle>
-                <DialogDescription>Edit SKILL.md content directly. Name and description are parsed from YAML frontmatter.</DialogDescription>
+                <div className="flex items-center gap-2">
+                  <DialogTitle>{headerTitle}</DialogTitle>
+                  {mode === "edit" && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs">
+                          Mode: {editorUiMode === "view" ? "View" : "Edit"}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onSelect={() => setEditorUiMode("view")}>View Mode</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => setEditorUiMode("edit")}>Edit Mode</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
               </div>
               {mode === "edit" && skill?.path && (
                 <div className="mr-8 flex items-center gap-1">
@@ -676,32 +832,50 @@ export function SkillEditorDialog({
                 </Select>
               ) : (
                 <div className="text-xs text-muted-foreground">
-                  Editing {selectedFile}
+                  {fileStatusLabel}
                   {dirtyFiles.has(selectedFile) ? " • Unsaved" : ""}
                 </div>
+              )}
+              {mode === "edit" && hasGithubToken && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={creatingGist || !selectedFile}
+                  onClick={() => void onCreateGist()}
+                >
+                  <ExternalLink className="size-4" />
+                  {creatingGist ? "Creating Gist..." : "Create GitHub Gist"}
+                </Button>
               )}
             </div>
             <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
               <div className="w-64 shrink-0 overflow-auto rounded-md border border-border p-2">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Files</span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" className="size-7" title="Create">
-                        <Plus className="size-4" />
+                  <div className="flex items-center gap-1">
+                    {mode === "edit" && skill?.path && (
+                      <Button variant="outline" size="icon" className="size-7" title="Reveal in Finder" onClick={() => void onReveal()}>
+                        <FolderOpen className="size-4" />
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                      <DropdownMenuItem onClick={() => onAddMarkdownAt()}>New Markdown</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => void onAddFolder()}>New Folder...</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      {STANDARD_FOLDERS.map((folder) => (
-                        <DropdownMenuItem key={folder} onClick={() => void createFolder(folder)}>
-                          Add {folder}/
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="size-7" title="Create" disabled={isReadOnly}>
+                          <Plus className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem disabled={isReadOnly} onSelect={() => openCreateEntryDialog("markdown")}>New Markdown</DropdownMenuItem>
+                        <DropdownMenuItem disabled={isReadOnly} onSelect={() => openCreateEntryDialog("folder")}>New Folder...</DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {STANDARD_FOLDERS.map((folder) => (
+                          <DropdownMenuItem key={folder} disabled={isReadOnly} onSelect={() => void createFolder(folder)}>
+                            Add {folder}/
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   {entries.map((entry) => {
@@ -717,51 +891,82 @@ export function SkillEditorDialog({
                       candidate.relativePath.startsWith(`${entry.relativePath}/`),
                     );
                     return (
-                      <button
-                        key={`${entry.isDir ? "d" : "f"}:${entry.relativePath}`}
-                        type="button"
-                        className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
-                          entry.isDir
-                            ? "text-muted-foreground hover:bg-muted/40"
-                            : isSelected
-                              ? "bg-primary/15 text-primary"
-                              : "text-foreground hover:bg-muted/50"
-                        }`}
-                        style={{ paddingLeft: `${8 + depth * 12}px` }}
-                        onContextMenu={(event) => {
-                          event.preventDefault();
-                          setContextMenu({
-                            entry,
-                            x: event.clientX,
-                            y: event.clientY,
-                            hasChildren: entries.some((candidate) =>
-                              candidate.relativePath.startsWith(`${entry.relativePath}/`),
-                            ),
-                          });
-                        }}
-                        onClick={() => void onSelectEntry(entry)}
-                      >
-                        {entry.isDir ? (
-                          <>
-                            {hasChildren ? (
-                              isCollapsed ? (
-                                <ChevronRight className="size-3 shrink-0" />
-                              ) : (
-                                <ChevronDown className="size-3 shrink-0" />
-                              )
+                      <ContextMenu key={`${entry.isDir ? "d" : "f"}:${entry.relativePath}`}>
+                        <ContextMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
+                              entry.isDir
+                                ? "text-muted-foreground hover:bg-muted/40"
+                                : isSelected
+                                  ? "bg-primary/15 text-primary"
+                                  : "text-foreground hover:bg-muted/50"
+                            }`}
+                            style={{ paddingLeft: `${8 + depth * 12}px` }}
+                            onClick={() => void onSelectEntry(entry)}
+                          >
+                            {entry.isDir ? (
+                              <>
+                                {hasChildren ? (
+                                  isCollapsed ? (
+                                    <ChevronRight className="size-3 shrink-0" />
+                                  ) : (
+                                    <ChevronDown className="size-3 shrink-0" />
+                                  )
+                                ) : (
+                                  <span className="inline-block size-3 shrink-0" />
+                                )}
+                                <Folder className="size-3.5 shrink-0" />
+                              </>
                             ) : (
-                              <span className="inline-block size-3 shrink-0" />
+                              <>
+                                <span className="inline-block size-3 shrink-0" />
+                                <FileText className="size-3.5 shrink-0" />
+                              </>
                             )}
-                            <Folder className="size-3.5 shrink-0" />
-                          </>
-                        ) : (
-                          <>
-                            <span className="inline-block size-3 shrink-0" />
-                            <FileText className="size-3.5 shrink-0" />
-                          </>
-                        )}
-                        <span className="truncate">{name}</span>
-                      </button>
+                            <span className="truncate">{name}</span>
+                          </button>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuItem onSelect={() => void onRevealEntry(entry)}>
+                            <FolderOpen className="size-3.5" />
+                            Reveal in Finder
+                          </ContextMenuItem>
+                          {entry.isDir ? (
+                            <>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem disabled={isReadOnly} onSelect={() => openCreateEntryDialog("markdown", entry.relativePath)}>
+                                <Plus className="size-3.5" />
+                                New Markdown
+                              </ContextMenuItem>
+                              <ContextMenuItem disabled={isReadOnly} onSelect={() => openCreateEntryDialog("folder", entry.relativePath)}>
+                                <Folder className="size-3.5" />
+                                New Folder
+                              </ContextMenuItem>
+                              <ContextMenuItem disabled={isReadOnly} onSelect={() => requestRenameEntry(entry)}>
+                                <Edit3 className="size-3.5" />
+                                Rename Folder
+                              </ContextMenuItem>
+                              <ContextMenuItem disabled={isReadOnly || hasChildren} onSelect={() => requestDeleteEntry(entry)}>
+                                <Trash2 className="size-3.5" />
+                                Delete Folder
+                              </ContextMenuItem>
+                            </>
+                          ) : (
+                            <>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem disabled={isReadOnly} onSelect={() => requestRenameEntry(entry)}>
+                                <Edit3 className="size-3.5" />
+                                Rename File
+                              </ContextMenuItem>
+                              <ContextMenuItem disabled={isReadOnly} variant="destructive" onSelect={() => requestDeleteEntry(entry)}>
+                                <Trash2 className="size-3.5" />
+                                Delete File
+                              </ContextMenuItem>
+                            </>
+                          )}
+                        </ContextMenuContent>
+                      </ContextMenu>
                     );
                   })}
                 </div>
@@ -779,6 +984,7 @@ export function SkillEditorDialog({
                     }}
                     onChange={(value) =>
                       {
+                        if (isReadOnly) return;
                         const nextValue = value ?? "";
                         setContentByFile((prev) => ({
                           ...prev,
@@ -798,21 +1004,14 @@ export function SkillEditorDialog({
                       minimap: { enabled: false },
                       fontSize: 13,
                       wordWrap: "on",
+                      readOnly: isReadOnly,
                     }}
                   />
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center justify-between">
-              <div>
-                {mode === "edit" && (
-                  <Button variant="outline" disabled={creatingGist || !selectedFile} onClick={() => void onCreateGist()}>
-                    <ExternalLink className="size-4" />
-                    {creatingGist ? "Creating Gist..." : "Create GitHub Gist"}
-                  </Button>
-                )}
-              </div>
-              <Button disabled={saving || !selectedFile} onClick={() => void submit()}>
+            <div className="flex shrink-0 items-center justify-end">
+              <Button disabled={saving || !selectedFile || isReadOnly} onClick={() => void submit()}>
                 {mode === "edit" ? <Save className="size-4" /> : <BadgeCheck className="size-4" />}
                 {saving ? "Saving..." : mode === "edit" ? "Save File" : "Create Skill"}
               </Button>
@@ -820,91 +1019,6 @@ export function SkillEditorDialog({
           </div>
         </DialogContent>
       </Dialog>
-
-      {contextMenu && (
-        <div
-          className="fixed z-[200] min-w-44 rounded-md border border-border bg-popover p-1 text-sm shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {contextMenu.entry.isDir ? (
-            <>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted/50"
-                onClick={() => {
-                  setContextMenu(null);
-                  onAddMarkdownAt(contextMenu.entry.relativePath);
-                }}
-              >
-                <Plus className="size-3.5" />
-                New Markdown
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted/50"
-                onClick={() => {
-                  setContextMenu(null);
-                  const input = window.prompt("New folder name", "new-folder");
-                  if (!input) return;
-                  void createFolder(`${contextMenu.entry.relativePath}/${input}`);
-                }}
-              >
-                <Folder className="size-3.5" />
-                New Folder
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted/50"
-                onClick={() => {
-                  setContextMenu(null);
-                  void renameEntry(contextMenu.entry);
-                }}
-              >
-                <Edit3 className="size-3.5" />
-                Rename Folder
-              </button>
-              <button
-                type="button"
-                disabled={contextMenu.hasChildren}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => {
-                  setContextMenu(null);
-                  void deleteEmptyFolder(contextMenu.entry);
-                }}
-              >
-                <Trash2 className="size-3.5" />
-                Delete Folder
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-muted/50"
-                onClick={() => {
-                  setContextMenu(null);
-                  void renameEntry(contextMenu.entry);
-                }}
-              >
-                <Edit3 className="size-3.5" />
-                Rename File
-              </button>
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-destructive hover:bg-destructive/10"
-                onClick={() => {
-                  setContextMenu(null);
-                  void deleteFile(contextMenu.entry);
-                }}
-              >
-                <Trash2 className="size-3.5" />
-                Delete File
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
       <Dialog
         open={unsavedSwitchOpen}
@@ -948,6 +1062,151 @@ export function SkillEditorDialog({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => void onDelete()}>
+              Move to Trash
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={unsavedCloseOpen} onOpenChange={setUnsavedCloseOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. Save before closing this editor?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex sm:justify-end">
+            <Button variant="outline" onClick={() => setUnsavedCloseOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => onUnsavedDiscardAndClose()}>
+              Discard
+            </Button>
+            <Button onClick={() => void onUnsavedSaveAndClose()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={createEntryDialogOpen}
+        onOpenChange={(open) => {
+          setCreateEntryDialogOpen(open);
+          if (!open) {
+            setCreateEntryValue("");
+            setCreateEntryBaseDir("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{createEntryType === "markdown" ? "New Markdown" : "New Folder"}</DialogTitle>
+            <DialogDescription>
+              Enter a path relative to this skill.
+              {createEntryBaseDir ? ` Base directory: ${createEntryBaseDir}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={createEntryValue}
+            onChange={(event) => setCreateEntryValue(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void confirmCreateEntry();
+              }
+            }}
+          />
+          <DialogFooter className="flex sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateEntryDialogOpen(false);
+                setCreateEntryValue("");
+                setCreateEntryBaseDir("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmCreateEntry()}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={renameDialogOpen}
+        onOpenChange={(open) => {
+          setRenameDialogOpen(open);
+          if (!open) {
+            setRenameTarget(null);
+            setRenameValue("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{renameTarget?.isDir ? "Rename Folder" : "Rename File"}</DialogTitle>
+            <DialogDescription>
+              Enter a new name for <span className="font-mono">{renameTarget?.relativePath}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void confirmRenameEntry();
+              }
+            }}
+          />
+          <DialogFooter className="flex sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRenameDialogOpen(false);
+                setRenameTarget(null);
+                setRenameValue("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void confirmRenameEntry()}>
+              Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={deleteEntryDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteEntryDialogOpen(open);
+          if (!open) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Move to Trash?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.isDir
+                ? `The folder "${deleteTarget.relativePath}" will be moved to Trash.`
+                : `The file "${deleteTarget?.relativePath}" will be moved to Trash.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => void confirmDeleteEntry()}
+            >
               Move to Trash
             </AlertDialogAction>
           </AlertDialogFooter>

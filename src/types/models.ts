@@ -42,6 +42,7 @@ export interface DashboardData {
   stats: DashboardStats;
   appDataDir: string;
   hasGithubToken: boolean;
+  skillEditorDefaultMode: "view" | "edit";
 }
 
 export interface SaveSkillRequest {

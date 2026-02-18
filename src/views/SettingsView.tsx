@@ -5,20 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { revealInFinder, setGithubToken } from "@/lib/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { revealInFinder, setGithubToken, setSkillEditorDefaultMode } from "@/lib/api";
 import { formatDisplayPath } from "@/lib/utils";
 
 export function SettingsView({
   appDataDir,
   hasGithubToken,
+  skillEditorDefaultMode,
   onGithubTokenChanged,
+  onEditorDefaultModeChanged,
 }: {
   appDataDir: string;
   hasGithubToken: boolean;
+  skillEditorDefaultMode: "view" | "edit";
   onGithubTokenChanged: () => Promise<void>;
+  onEditorDefaultModeChanged: () => Promise<void>;
 }) {
   const [githubToken, setGithubTokenValue] = useState("");
   const [savingToken, setSavingToken] = useState(false);
+  const [savingEditorMode, setSavingEditorMode] = useState(false);
 
   const copyPath = async () => {
     await navigator.clipboard.writeText(appDataDir);
@@ -75,6 +81,20 @@ export function SettingsView({
     }
   };
 
+  const changeEditorMode = async (nextMode: "view" | "edit") => {
+    if (nextMode === skillEditorDefaultMode) return;
+    try {
+      setSavingEditorMode(true);
+      await setSkillEditorDefaultMode(nextMode);
+      await onEditorDefaultModeChanged();
+      toast.success("Default editor mode updated");
+    } catch (error) {
+      toast.error(`Failed to update editor mode: ${String(error)}`);
+    } finally {
+      setSavingEditorMode(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <Card>
@@ -112,10 +132,64 @@ export function SettingsView({
                 Clear
               </Button>
             </div>
+            <div className="space-y-2 rounded-md border border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+              <p className="text-foreground">
+                Create a GitHub personal access token to enable <strong>Create GitHub Gist</strong> in Edit Skills.
+              </p>
+              <p>
+                Required permission:
+                <br />
+                <span className="font-mono">gist</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => void openExternal("https://github.com/settings/tokens/new?description=SkillsYoga&scopes=gist")}
+                >
+                  New Token
+                  <ExternalLink className="size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => void openExternal("https://github.com/settings/tokens")}
+                >
+                  Token Settings
+                  <ExternalLink className="size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => void openExternal("https://docs.github.com/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens")}
+                >
+                  GitHub Docs
+                  <ExternalLink className="size-3.5" />
+                </Button>
+              </div>
+            </div>
           </div>
-          <div>
+          <div className="space-y-1">
             <Label>Shortcuts</Label>
-            <Input value="Cmd/Ctrl + Shift + R: Refresh dashboard" readOnly />
+            <Input value="Cmd/Ctrl + Shift + R: Refresh Skills" readOnly />
+          </div>
+          <div className="space-y-2">
+            <Label>Edit Skills Default Mode</Label>
+            <Select value={skillEditorDefaultMode} onValueChange={(value) => void changeEditorMode(value as "view" | "edit")}>
+              <SelectTrigger disabled={savingEditorMode} className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="view">View (Read-only)</SelectItem>
+                <SelectItem value="edit">Edit</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>

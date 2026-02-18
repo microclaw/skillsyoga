@@ -120,7 +120,7 @@ function App() {
   const searchPlaceholder = view === "skills" ? "Search skills" : view === "tools" ? "Search tools" : null;
 
   return (
-    <div className="dark min-h-screen bg-background text-foreground">
+    <div className="dark h-screen overflow-hidden bg-background text-foreground">
       <SidebarProvider>
         <Sidebar variant="inset">
           <SidebarHeader>
@@ -168,7 +168,7 @@ function App() {
             </div>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset className="min-w-0 overflow-hidden">
+        <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
           <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-sm">
             <div className="mx-auto flex h-[72px] w-full max-w-[1680px] items-center justify-between px-4 md:px-8">
               <div className="flex items-center gap-2">
@@ -207,7 +207,7 @@ function App() {
             </div>
           </header>
 
-          <main className="mx-auto w-full min-w-0 max-w-[1680px] space-y-5 p-4 md:p-8">
+          <main className="mx-auto min-h-0 flex-1 w-full min-w-0 max-w-[1680px] overflow-y-auto space-y-5 p-4 md:p-8">
             {view === "skills" && (
               <SkillsView
                 installedCount={data?.stats.installedSkills ?? 0}
@@ -250,6 +250,8 @@ function App() {
                 appDataDir={data.appDataDir}
                 hasGithubToken={data.hasGithubToken}
                 onGithubTokenChanged={refresh}
+                skillEditorDefaultMode={data.skillEditorDefaultMode}
+                onEditorDefaultModeChanged={refresh}
               />
             )}
           </main>
@@ -263,6 +265,7 @@ function App() {
           skill={editor.source}
           tools={data.tools}
           hasGithubToken={data.hasGithubToken}
+          defaultEditorMode={data.skillEditorDefaultMode}
           onOpenChange={(open) => setEditor((prev) => ({ ...prev, open }))}
           onSaved={async () => {
             await refresh();

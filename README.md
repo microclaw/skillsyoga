@@ -46,6 +46,25 @@ You can create, edit, organize, and import skills without manually switching bet
 
 ## Quick Start
 
+### Install via Homebrew (macOS)
+
+```bash
+brew tap everettjf/homebrew-tap
+brew install --cask skillsyoga
+```
+
+Upgrade:
+
+```bash
+brew upgrade --cask skillsyoga
+```
+
+Uninstall:
+
+```bash
+brew uninstall --cask skillsyoga
+```
+
 ### Prerequisites
 
 - Bun
