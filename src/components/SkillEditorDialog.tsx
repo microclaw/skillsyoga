@@ -180,6 +180,7 @@ export function SkillEditorDialog({
   const [editorUiMode, setEditorUiMode] = useState<"view" | "edit">("view");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const nonUserChangeLogCountRef = useRef(0);
   const userChangeLogCountRef = useRef(0);
 
@@ -254,6 +255,7 @@ export function SkillEditorDialog({
   }, [defaultEditorMode, mode, open]);
 
   const isReadOnly = mode === "edit" && editorUiMode === "view";
+  const useStableTextarea = !import.meta.env.DEV;
 
   useEffect(() => {
     if (!open || mode !== "edit") return;
@@ -770,15 +772,24 @@ export function SkillEditorDialog({
       return;
     }
     const editorState = editorViewRef.current?.state;
-    const fullText = isReadOnly ? selectedContent : (editorState?.doc.toString() ?? "");
+    const textarea = textareaRef.current;
+    const textareaSelectedText =
+      textarea && textarea.selectionStart !== textarea.selectionEnd
+        ? textarea.value.slice(textarea.selectionStart, textarea.selectionEnd)
+        : "";
+    const fullText = isReadOnly
+      ? selectedContent
+      : (useStableTextarea ? (textarea?.value ?? selectedContent) : (editorState?.doc.toString() ?? ""));
     const selectedText = isReadOnly
       ? (window.getSelection()?.toString() ?? "")
-      : (editorState
+      : (useStableTextarea
+        ? textareaSelectedText
+        : (editorState
         ? editorState.selection.ranges
           .filter((range) => !range.empty)
           .map((range) => editorState.doc.sliceString(range.from, range.to))
           .join("\n")
-        : "");
+        : ""));
     if (!selectedText.trim()) {
       window.alert("Please select text before creating a gist.");
       return;
@@ -1026,6 +1037,26 @@ export function SkillEditorDialog({
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading file...</div>
                 ) : isReadOnly ? (
                   <pre className="skillsyoga-view h-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap">{selectedContent}</pre>
+                ) : useStableTextarea ? (
+                  <textarea
+                    ref={textareaRef}
+                    className="skillsyoga-textarea h-full w-full resize-none border-0 bg-transparent p-4 font-mono text-sm leading-6 outline-none"
+                    value={selectedContent}
+                    onChange={(event) => {
+                      const nextValue = event.currentTarget.value;
+                      setContentByFile((prev) => ({
+                        ...prev,
+                        [selectedFile]: nextValue,
+                      }));
+                      setDirtyFiles((prev) => {
+                        const next = new Set(prev);
+                        const baseline = savedByFile[selectedFile] ?? "";
+                        if (nextValue !== baseline) next.add(selectedFile);
+                        else next.delete(selectedFile);
+                        return next;
+                      });
+                    }}
+                  />
                 ) : (
                   <CodeMirror
                     value={selectedContent}
