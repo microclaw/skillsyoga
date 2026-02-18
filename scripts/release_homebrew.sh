@@ -5,7 +5,12 @@ ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 REPO_DIR="$ROOT_DIR"
 TAURI_HOMEBREW_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.json"
 TMP_CONFIG="$REPO_DIR/src-tauri/tauri.conf.homebrew.generated.json"
-VERSION_FILES=("package.json" "src-tauri/Cargo.toml" "src-tauri/tauri.conf.json" "src-tauri/Cargo.lock")
+VERSION_FILES=(
+  "package.json"
+  "src-tauri/Cargo.toml"
+  "src-tauri/tauri.conf.json"
+  "src-tauri/Cargo.lock"
+)
 
 APP_NAME="${APP_NAME:-SkillsYoga}"
 APP_SLUG="${APP_SLUG:-skillsyoga}"
@@ -26,6 +31,8 @@ SKIP_BUMP="${SKIP_BUMP:-0}"
 SKIP_NOTARIZE="${SKIP_NOTARIZE:-0}"
 SKIP_CASK_UPDATE="${SKIP_CASK_UPDATE:-0}"
 FORCE_CLEAN_BUILD="${FORCE_CLEAN_BUILD:-1}"
+AUTO_COMMIT_BEFORE_RELEASE="${AUTO_COMMIT_BEFORE_RELEASE:-1}"
+AUTO_COMMIT_MESSAGE="${AUTO_COMMIT_MESSAGE:-chore: checkpoint before release}"
 
 infer_release_repo() {
   local remote
@@ -66,6 +73,30 @@ require_cmd() {
     echo "Missing required command: $1" >&2
     exit 1
   fi
+}
+
+version_files_changed() {
+  ! git diff --quiet -- \
+    "package.json" \
+    "src-tauri/Cargo.toml" \
+    "src-tauri/tauri.conf.json" \
+    "src-tauri/Cargo.lock"
+}
+
+add_version_files() {
+  git add -- \
+    "package.json" \
+    "src-tauri/Cargo.toml" \
+    "src-tauri/tauri.conf.json" \
+    "src-tauri/Cargo.lock"
+}
+
+restore_version_files() {
+  git checkout -- \
+    "package.json" \
+    "src-tauri/Cargo.toml" \
+    "src-tauri/tauri.conf.json" \
+    "src-tauri/Cargo.lock" >/dev/null 2>&1 || true
 }
 
 for cmd in bun git gh shasum node xcrun; do
@@ -112,7 +143,17 @@ fi
 
 cd "$REPO_DIR"
 
-if [ "$SKIP_BUMP" != "1" ] && ! git diff --quiet -- "${VERSION_FILES[@]}"; then
+if [ "$AUTO_COMMIT_BEFORE_RELEASE" = "1" ]; then
+  if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    git add -A
+    if ! git diff --cached --quiet; then
+      git commit -m "$AUTO_COMMIT_MESSAGE"
+      git push
+    fi
+  fi
+fi
+
+if [ "$SKIP_BUMP" != "1" ] && version_files_changed; then
   echo "Version files have local changes. Commit or stash them first:" >&2
   printf '  %s\n' "${VERSION_FILES[@]}" >&2
   exit 1
@@ -126,7 +167,7 @@ RELEASE_DONE=0
 cleanup() {
   rm -f "$TMP_CONFIG"
   if [ "$RELEASE_DONE" -eq 0 ] && [ "$DID_BUMP" -eq 1 ]; then
-    git checkout -- "${VERSION_FILES[@]}" >/dev/null 2>&1 || true
+    restore_version_files
   fi
 }
 trap cleanup EXIT
@@ -210,7 +251,7 @@ if [ "$SKIP_NOTARIZE" != "1" ]; then
 fi
 
 if [ "$DID_BUMP" -eq 1 ]; then
-  git add "${VERSION_FILES[@]}"
+  add_version_files
   git commit -m "new version: $VERSION"
   git push
   git tag "$TAG"
