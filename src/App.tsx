@@ -248,6 +248,8 @@ function App() {
             {view === "settings" && data && (
               <SettingsView
                 appDataDir={data.appDataDir}
+                hasGithubToken={data.hasGithubToken}
+                onGithubTokenChanged={refresh}
               />
             )}
           </main>
@@ -260,6 +262,7 @@ function App() {
           mode={editor.mode}
           skill={editor.source}
           tools={data.tools}
+          hasGithubToken={data.hasGithubToken}
           onOpenChange={(open) => setEditor((prev) => ({ ...prev, open }))}
           onSaved={async () => {
             await refresh();

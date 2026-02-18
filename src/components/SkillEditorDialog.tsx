@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
+import type { editor as MonacoEditor } from "monaco-editor";
 import {
   BadgeCheck,
   ChevronDown,
   ChevronRight,
   Edit3,
+  ExternalLink,
   FileText,
   Folder,
   FolderOpen,
@@ -15,6 +17,7 @@ import {
 import { toast } from "sonner";
 import {
   createSkillDir,
+  createGithubGist,
   deleteSkillEmptyDir,
   deleteSkillEntry,
   deleteSkill,
@@ -124,6 +127,7 @@ export function SkillEditorDialog({
   mode,
   skill,
   tools,
+  hasGithubToken,
   onOpenChange,
   onSaved,
 }: {
@@ -131,6 +135,7 @@ export function SkillEditorDialog({
   mode: "create" | "edit";
   skill?: SkillInfo;
   tools: ToolInfo[];
+  hasGithubToken: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
@@ -155,7 +160,9 @@ export function SkillEditorDialog({
   const [unsavedSwitchOpen, setUnsavedSwitchOpen] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [creatingGist, setCreatingGist] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [editorInstance, setEditorInstance] = useState<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -310,6 +317,16 @@ export function SkillEditorDialog({
   const onUnsavedDiscardAndSwitch = async () => {
     if (!pendingEntry) return;
     const target = pendingEntry;
+    const current = selectedFile;
+    setContentByFile((prev) => ({
+      ...prev,
+      [current]: savedByFile[current] ?? "",
+    }));
+    setDirtyFiles((prev) => {
+      const next = new Set(prev);
+      next.delete(current);
+      return next;
+    });
     setUnsavedSwitchOpen(false);
     setPendingEntry(null);
     await switchToEntry(target);
@@ -575,6 +592,49 @@ export function SkillEditorDialog({
     }
   };
 
+  const onCreateGist = async () => {
+    if (mode !== "edit" || !skill) {
+      return;
+    }
+    if (!hasGithubToken) {
+      window.alert("Please set GitHub Token in Settings.");
+      return;
+    }
+    const selection = editorInstance?.getSelection();
+    const model = editorInstance?.getModel();
+    const selectedText = selection && model ? model.getValueInRange(selection) : "";
+    if (!selectedText.trim()) {
+      toast.error("Please select text in the editor first");
+      return;
+    }
+
+    try {
+      setCreatingGist(true);
+      const gistUrl = await createGithubGist({
+        skillName: skill.name,
+        skillDescription: skill.description,
+        filePath: selectedFile,
+        selectedText,
+      });
+      toast.success("GitHub Gist created");
+      try {
+        const { openUrl } = await import("@tauri-apps/plugin-opener");
+        await openUrl(gistUrl);
+      } catch {
+        window.open(gistUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      const message = String(error);
+      if (message.includes("Please set GitHub Token in Settings.")) {
+        window.alert("Please set GitHub Token in Settings.");
+        return;
+      }
+      toast.error(`Failed to create gist: ${message}`);
+    } finally {
+      setCreatingGist(false);
+    }
+  };
+
   const selectedContent = contentByFile[selectedFile] ?? "";
 
   return (
@@ -623,12 +683,12 @@ export function SkillEditorDialog({
             </div>
             <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
               <div className="w-64 shrink-0 overflow-auto rounded-md border border-border p-2">
-                <div className="mb-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Files</span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="w-full justify-start">
+                      <Button variant="outline" size="icon" className="size-7" title="Create">
                         <Plus className="size-4" />
-                        Create
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
@@ -714,6 +774,9 @@ export function SkillEditorDialog({
                     height="100%"
                     language="markdown"
                     value={selectedContent}
+                    onMount={(editor) => {
+                      setEditorInstance(editor);
+                    }}
                     onChange={(value) =>
                       {
                         const nextValue = value ?? "";
@@ -740,10 +803,20 @@ export function SkillEditorDialog({
                 )}
               </div>
             </div>
-            <Button className="shrink-0 self-end" disabled={saving || !selectedFile} onClick={() => void submit()}>
-              {mode === "edit" ? <Save className="size-4" /> : <BadgeCheck className="size-4" />}
-              {saving ? "Saving..." : mode === "edit" ? "Save File" : "Create Skill"}
-            </Button>
+            <div className="flex shrink-0 items-center justify-between">
+              <div>
+                {mode === "edit" && (
+                  <Button variant="outline" disabled={creatingGist || !selectedFile} onClick={() => void onCreateGist()}>
+                    <ExternalLink className="size-4" />
+                    {creatingGist ? "Creating Gist..." : "Create GitHub Gist"}
+                  </Button>
+                )}
+              </div>
+              <Button disabled={saving || !selectedFile} onClick={() => void submit()}>
+                {mode === "edit" ? <Save className="size-4" /> : <BadgeCheck className="size-4" />}
+                {saving ? "Saving..." : mode === "edit" ? "Save File" : "Create Skill"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -41,6 +41,7 @@ export interface DashboardData {
   sources: SourceInfo[];
   stats: DashboardStats;
   appDataDir: string;
+  hasGithubToken: boolean;
 }
 
 export interface SaveSkillRequest {
@@ -86,4 +87,11 @@ export interface SaveSkillEntryRequest {
   path: string;
   relativePath: string;
   content: string;
+}
+
+export interface CreateGitHubGistRequest {
+  skillName: string;
+  skillDescription: string;
+  filePath: string;
+  selectedText: string;
 }

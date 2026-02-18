@@ -7,7 +7,7 @@ use std::{
 use crate::error::AppError;
 use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir};
 use crate::models::{
-    CustomToolInput, DashboardData, DashboardStats, InstallFromRegistryRequest,
+    CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, InstallFromRegistryRequest,
     InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
     SearchSkillsResponse, SkillFileEntry, SkillInfo,
 };
@@ -113,6 +113,10 @@ fn dashboard(app: &tauri::AppHandle) -> Result<DashboardData, AppError> {
         sources: curated_sources(),
         stats,
         app_data_dir: app_data_dir(app)?.to_string_lossy().to_string(),
+        has_github_token: state
+            .github_token
+            .as_ref()
+            .is_some_and(|token| !token.trim().is_empty()),
     })
 }
 
@@ -638,4 +642,95 @@ pub fn reveal_in_finder(path: String) -> Result<(), AppError> {
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_github_token(app: tauri::AppHandle, token: String) -> Result<(), AppError> {
+    let mut state = load_state(&app)?;
+    let cleaned = token.trim().to_string();
+    state.github_token = if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    };
+    save_state(&app, &state)
+}
+
+#[tauri::command]
+pub async fn create_github_gist(
+    app: tauri::AppHandle,
+    request: CreateGistRequest,
+) -> Result<String, AppError> {
+    let state = load_state(&app)?;
+    let token = state
+        .github_token
+        .as_ref()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| AppError::Validation("Please set GitHub Token in Settings.".to_string()))?;
+
+    let selected_text = request.selected_text.trim();
+    if selected_text.is_empty() {
+        return Err(AppError::Validation(
+            "Please select some text before creating a gist.".to_string(),
+        ));
+    }
+
+    let skill_name = request.skill_name.trim();
+    let skill_description = request.skill_description.trim();
+    let file_path = request.file_path.trim();
+    let fence = if selected_text.contains("```") {
+        "````"
+    } else {
+        "```"
+    };
+    let gist_content = format!(
+        "# SkillsYoga Excerpt\n\n## Skill\n- Name: {skill_name}\n- Description: {skill_description}\n- File: {file_path}\n\n## Selected Text\n{fence}\n{selected_text}\n{fence}\n"
+    );
+
+    let safe_name = if skill_name.is_empty() {
+        "skill"
+    } else {
+        skill_name
+    };
+    let gist_file_name = format!("{}-excerpt.md", slugify(safe_name));
+    let body = serde_json::json!({
+      "description": format!("SkillsYoga excerpt from {}", if skill_name.is_empty() { "skill" } else { skill_name }),
+      "public": false,
+      "files": {
+        gist_file_name: { "content": gist_content }
+      }
+    });
+
+    let response = reqwest::Client::new()
+        .post("https://api.github.com/gists")
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "skillsyoga")
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| AppError::Network(format!("Failed to create gist: {e}")))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let message = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown error".to_string());
+        return Err(AppError::Network(format!(
+            "GitHub Gist API failed ({status}): {message}"
+        )));
+    }
+
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| AppError::Network(format!("Invalid GitHub response: {e}")))?;
+    let url = data
+        .get("html_url")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::Network("GitHub response missing gist URL".to_string()))?;
+
+    Ok(url.to_string())
 }

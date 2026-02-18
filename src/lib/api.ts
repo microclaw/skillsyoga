@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CreateGitHubGistRequest,
   CustomToolInput,
   DashboardData,
   InstallFromRegistryRequest,
@@ -85,4 +86,12 @@ export async function reorderTools(toolOrder: string[]) {
 
 export async function revealInFinder(path: string) {
   return invoke<void>("reveal_in_finder", { path });
+}
+
+export async function setGithubToken(token: string) {
+  return invoke<void>("set_github_token", { token });
+}
+
+export async function createGithubGist(request: CreateGitHubGistRequest) {
+  return invoke<string>("create_github_gist", { request });
 }

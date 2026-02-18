@@ -52,6 +52,7 @@ pub struct DashboardData {
     pub sources: Vec<SourceInfo>,
     pub stats: DashboardStats,
     pub app_data_dir: String,
+    pub has_github_token: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -61,6 +62,8 @@ pub struct AppState {
     pub custom_tools: Vec<CustomToolInput>,
     #[serde(default)]
     pub tool_order: Vec<String>,
+    #[serde(default)]
+    pub github_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +113,15 @@ pub struct InstallFromRegistryRequest {
     pub source: String,
     pub skill_id: String,
     pub target_tool_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGistRequest {
+    pub skill_name: String,
+    pub skill_description: String,
+    pub file_path: String,
+    pub selected_text: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

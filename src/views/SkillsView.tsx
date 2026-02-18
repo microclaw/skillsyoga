@@ -92,7 +92,7 @@ export function SkillsView({
       {layout === "grid" ? (
         <div className="flex flex-wrap gap-3">
           {skills.map((skill, index) => (
-            <Card key={skill.id} className="flex h-[130px] min-w-[100px] max-w-[400px] flex-1 basis-[280px] flex-col justify-between border-border/80 bg-card/80 p-3.5 shadow-sm transition hover:border-border hover:bg-card">
+            <Card key={skill.id} className="flex h-[150px] min-w-[100px] max-w-[400px] flex-1 basis-[280px] flex-col justify-between border-border/80 bg-card/80 p-3.5 shadow-sm transition hover:border-border hover:bg-card">
               <div>
                 <div className="flex items-center gap-2">
                   <div
@@ -107,7 +107,7 @@ export function SkillsView({
                   </div>
                   <span className="truncate text-sm font-medium">{skill.name}</span>
                 </div>
-                <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">{skill.description}</p>
+                <p className="mt-1.5 line-clamp-3 text-xs text-muted-foreground">{skill.description}</p>
               </div>
               <div className="flex items-end justify-between">
                 <div className="flex flex-wrap gap-1">
