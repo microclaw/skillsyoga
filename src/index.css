@@ -96,10 +96,15 @@
 .skillsyoga-cm .cm-content,
 .skillsyoga-cm .cm-line {
   color: #e6edf3 !important;
+  -webkit-text-fill-color: #e6edf3 !important;
+  opacity: 1 !important;
 }
 
 .skillsyoga-cm .cm-content * {
   color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+  opacity: 1 !important;
+  mix-blend-mode: normal !important;
 }
 
 .skillsyoga-cm .cm-cursor,

@@ -1039,8 +1039,18 @@ export function SkillEditorDialog({
                     className="skillsyoga-cm h-full text-sm"
                     onCreateEditor={(view) => {
                       editorViewRef.current = view;
+                      const style = window.getComputedStyle(view.contentDOM);
+                      const line = view.contentDOM.querySelector(".cm-line");
+                      const lineStyle = line ? window.getComputedStyle(line) : null;
                       emitDiag("editor_created", {
                         docLength: view.state.doc.length,
+                        contentTextLength: view.contentDOM.textContent?.length ?? 0,
+                        contentColor: style.color,
+                        contentTextFillColor: style.getPropertyValue("-webkit-text-fill-color"),
+                        contentOpacity: style.opacity,
+                        lineColor: lineStyle?.color ?? null,
+                        lineTextFillColor: lineStyle?.getPropertyValue("-webkit-text-fill-color") ?? null,
+                        lineOpacity: lineStyle?.opacity ?? null,
                       });
                     }}
                     onChange={(value, viewUpdate) => {
