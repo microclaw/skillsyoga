@@ -9,7 +9,7 @@ VERSION_FILES=("package.json" "src-tauri/Cargo.toml" "src-tauri/tauri.conf.json"
 
 APP_NAME="${APP_NAME:-SkillsYoga}"
 APP_SLUG="${APP_SLUG:-skillsyoga}"
-TAP_REPO="${TAP_REPO:-everettjf/homebrew-tap}"
+TAP_REPO="${TAP_REPO:-microclaw/homebrew-tap}"
 TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 CASK_PATH="${CASK_PATH:-Casks/${APP_SLUG}.rb}"

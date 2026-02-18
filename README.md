@@ -49,7 +49,7 @@ You can create, edit, organize, and import skills without manually switching bet
 ### Install via Homebrew (macOS)
 
 ```bash
-brew tap everettjf/homebrew-tap && brew install --cask skillsyoga
+brew tap microclaw/homebrew-tap && brew install --cask skillsyoga
 ```
 
 Upgrade:
@@ -119,7 +119,7 @@ Optional release environment variables:
 
 - `SIGNING_IDENTITY`
 - `NOTARYTOOL_PROFILE` or (`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`)
-- `TAP_REPO` (default: `everettjf/homebrew-tap`)
+- `TAP_REPO` (default: `microclaw/homebrew-tap`)
 - `CASK_PATH` (default: `Casks/skillsyoga.rb`)
 - `RELEASE_REPO` (default: inferred from `git remote origin`, e.g. `microclaw/skillsyoga`)
 - `APP_HOMEPAGE`

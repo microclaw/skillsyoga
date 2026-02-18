@@ -7,12 +7,12 @@ use std::{
 use crate::error::AppError;
 use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir};
 use crate::models::{
-    CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats,
+    CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, DiscoveredSkillsRoot,
     InstallFromRegistryRequest, InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
     SearchSkillsResponse, SkillFileEntry, SkillInfo,
 };
 use crate::skills::{
-    collect_skills_from_tool, copy_dir_recursive, dir_display_name, discover_skill_dir,
+    collect_skills_from_tool, copy_dir_recursive, dir_display_name, discover_skill_dir, discover_skills_roots,
     discover_skill_dir_by_name, merge_skills, parse_skill_metadata,
 };
 use crate::state::{app_data_dir, load_state, save_state};
@@ -473,6 +473,25 @@ pub fn upsert_custom_tool(
 
     save_state(&app, &state)?;
     dashboard(&app)
+}
+
+#[tauri::command]
+pub fn discover_skills_paths(scan_root: String) -> Result<Vec<DiscoveredSkillsRoot>, AppError> {
+    let expanded = crate::helpers::expand_home(scan_root.trim())?;
+    if !expanded.exists() {
+        return Err(AppError::NotFound(format!(
+            "Scan path does not exist: {}",
+            expanded.display()
+        )));
+    }
+    if !expanded.is_dir() {
+        return Err(AppError::Validation(format!(
+            "Scan path is not a directory: {}",
+            expanded.display()
+        )));
+    }
+
+    Ok(discover_skills_roots(&expanded))
 }
 
 #[tauri::command]

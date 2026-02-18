@@ -164,3 +164,10 @@ pub struct CopySkillToToolRequest {
     pub source_path: String,
     pub target_tool_id: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredSkillsRoot {
+    pub path: String,
+    pub skill_count: usize,
+}

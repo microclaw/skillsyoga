@@ -4,6 +4,7 @@ import type {
   CreateGitHubGistRequest,
   CustomToolInput,
   DashboardData,
+  DiscoveredSkillsRoot,
   InstallFromRegistryRequest,
   InstallSkillRequest,
   SaveSkillEntryRequest,
@@ -67,6 +68,10 @@ export async function installSkillFromGithub(request: InstallSkillRequest) {
 
 export async function upsertCustomTool(tool: CustomToolInput) {
   return invoke<DashboardData>("upsert_custom_tool", { tool });
+}
+
+export async function discoverSkillsPaths(scanRoot: string) {
+  return invoke<DiscoveredSkillsRoot[]>("discover_skills_paths", { scanRoot });
 }
 
 export async function deleteCustomTool(toolId: string) {

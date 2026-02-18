@@ -101,3 +101,8 @@ export interface CopySkillToToolRequest {
   sourcePath: string;
   targetToolId: string;
 }
+
+export interface DiscoveredSkillsRoot {
+  path: string;
+  skillCount: number;
+}

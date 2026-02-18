@@ -7,7 +7,7 @@ use std::{
 
 use crate::error::AppError;
 use crate::helpers::now_iso;
-use crate::models::{SkillInfo, ToolInfo};
+use crate::models::{DiscoveredSkillsRoot, SkillInfo, ToolInfo};
 
 /// Extract the display name from a directory path, falling back to "skill".
 pub fn dir_display_name(path: &Path) -> String {
@@ -130,6 +130,29 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
 
     let mut skills = vec![];
 
+    let root_skill_file = root.join("SKILL.md");
+    if root_skill_file.exists() {
+        let content = fs::read_to_string(&root_skill_file)?;
+        let dir_name = dir_display_name(&root);
+        let skill_meta = parse_skill_metadata(&content, &dir_name);
+        let file_meta = fs::metadata(&root_skill_file).ok();
+        let modified = file_meta
+            .and_then(|m| m.modified().ok())
+            .and_then(|s| s.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs().to_string())
+            .unwrap_or_else(now_iso);
+
+        skills.push(SkillInfo {
+            id: format!("{}:{}", tool.id, dir_name),
+            name: skill_meta.name,
+            description: skill_meta.description,
+            path: root.to_string_lossy().to_string(),
+            source: tool.id.clone(),
+            enabled_for: vec![tool.id.clone()],
+            updated_at: modified,
+        });
+    }
+
     let entries = fs::read_dir(&root)?;
     for entry in entries {
         let entry = entry?;
@@ -167,6 +190,72 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
     }
 
     Ok(skills)
+}
+
+pub fn discover_skills_roots(root: &Path) -> Vec<DiscoveredSkillsRoot> {
+    if !root.exists() || !root.is_dir() {
+        return vec![];
+    }
+
+    let mut stack: Vec<(PathBuf, usize)> = vec![(root.to_path_buf(), 0)];
+    let mut discovered: HashMap<PathBuf, usize> = HashMap::new();
+
+    while let Some((dir, depth)) = stack.pop() {
+        let has_skill_file = dir.join("SKILL.md").is_file();
+
+        let mut child_skill_count = 0usize;
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        for entry in entries.flatten() {
+            let child = entry.path();
+            if !child.is_dir() {
+                continue;
+            }
+
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') {
+                continue;
+            }
+
+            if child.join("SKILL.md").is_file() {
+                child_skill_count += 1;
+            }
+
+            if depth < 6 {
+                let lower = name.to_ascii_lowercase();
+                if lower != "node_modules" && lower != "target" && lower != "dist" && lower != "build" {
+                    stack.push((child, depth + 1));
+                }
+            }
+        }
+
+        if has_skill_file || child_skill_count > 0 {
+            let count = if child_skill_count > 0 { child_skill_count } else { 1 };
+            discovered
+                .entry(dir)
+                .and_modify(|existing| *existing = (*existing).max(count))
+                .or_insert(count);
+        }
+    }
+
+    let mut out: Vec<DiscoveredSkillsRoot> = discovered
+        .into_iter()
+        .map(|(path, skill_count)| DiscoveredSkillsRoot {
+            path: path.to_string_lossy().to_string(),
+            skill_count,
+        })
+        .collect();
+
+    out.sort_by(|a, b| {
+        b.skill_count
+            .cmp(&a.skill_count)
+            .then_with(|| a.path.len().cmp(&b.path.len()))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    out
 }
 
 pub fn merge_skills(mut list: Vec<SkillInfo>) -> Vec<SkillInfo> {
