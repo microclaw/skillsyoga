@@ -204,70 +204,70 @@ if [ "$SKIP_NOTARIZE" != "1" ]; then
   fi
 fi
 
-# if [ "$DID_BUMP" -eq 1 ]; then
-#   git add "${VERSION_FILES[@]}"
-#   git commit -m "new version: $VERSION"
-#   git push
-#   git tag "$TAG"
-#   git push origin "$TAG"
-# fi
+if [ "$DID_BUMP" -eq 1 ]; then
+  git add "${VERSION_FILES[@]}"
+  git commit -m "new version: $VERSION"
+  git push
+  git tag "$TAG"
+  git push origin "$TAG"
+fi
 
-# RELEASE_ASSETS=("$RELEASE_DMG_PATH")
-# if [ "$DMG_PATH" != "$RELEASE_DMG_PATH" ]; then
-#   RELEASE_ASSETS+=("$DMG_PATH")
-# fi
+RELEASE_ASSETS=("$RELEASE_DMG_PATH")
+if [ "$DMG_PATH" != "$RELEASE_DMG_PATH" ]; then
+  RELEASE_ASSETS+=("$DMG_PATH")
+fi
 
-# if gh release view "$TAG" >/dev/null 2>&1; then
-#   gh release upload "$TAG" "${RELEASE_ASSETS[@]}" --clobber
-# else
-#   gh release create "$TAG" "${RELEASE_ASSETS[@]}" -t "$TAG" -n "$APP_NAME $TAG"
-# fi
+if gh release view "$TAG" >/dev/null 2>&1; then
+  gh release upload "$TAG" "${RELEASE_ASSETS[@]}" --clobber
+else
+  gh release create "$TAG" "${RELEASE_ASSETS[@]}" -t "$TAG" -n "$APP_NAME $TAG"
+fi
 
-# if [ "$SKIP_CASK_UPDATE" != "1" ]; then
-#   SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')
+if [ "$SKIP_CASK_UPDATE" != "1" ]; then
+  SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')
 
-#   if [ ! -d "$TAP_DIR/.git" ]; then
-#     git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
-#   fi
+  if [ ! -d "$TAP_DIR/.git" ]; then
+    git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
+  fi
 
-#   cd "$TAP_DIR"
-#   git fetch origin
-#   if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
-#     git checkout main
-#   fi
-#   git pull --rebase origin main
+  cd "$TAP_DIR"
+  git fetch origin
+  if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+    git checkout main
+  fi
+  git pull --rebase origin main
 
-#   mkdir -p "$(dirname "$CASK_PATH")"
-#   if [ ! -f "$CASK_PATH" ]; then
-#     cat > "$CASK_PATH" <<EOF
-# cask "$APP_SLUG" do
-#   version "$VERSION"
-#   sha256 "$SHA256"
+  mkdir -p "$(dirname "$CASK_PATH")"
+  if [ ! -f "$CASK_PATH" ]; then
+    cat > "$CASK_PATH" <<EOF
+cask "$APP_SLUG" do
+  version "$VERSION"
+  sha256 "$SHA256"
 
-#   url "https://github.com/$RELEASE_REPO/releases/download/v#{version}/$APP_NAME.dmg"
-#   name "$APP_NAME"
-#   desc "$APP_DESC"
-#   homepage "$APP_HOMEPAGE"
+  url "https://github.com/$RELEASE_REPO/releases/download/v#{version}/$APP_NAME.dmg"
+  name "$APP_NAME"
+  desc "$APP_DESC"
+  homepage "$APP_HOMEPAGE"
 
-#   app "$APP_NAME.app"
-# end
-# EOF
-#   else
-#     sed -i '' "s/^  version \".*\"/  version \"$VERSION\"/" "$CASK_PATH"
-#     sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" "$CASK_PATH"
-#   fi
+  app "$APP_NAME.app"
+end
+EOF
+  else
+    sed -i '' "s/^  version \".*\"/  version \"$VERSION\"/" "$CASK_PATH"
+    sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" "$CASK_PATH"
+  fi
 
-#   git add "$CASK_PATH"
-#   git commit -m "bump ${APP_SLUG} to $VERSION"
-#   if ! git push origin main; then
-#     git pull --rebase origin main
-#     git push origin main
-#   fi
-# fi
+  git add "$CASK_PATH"
+  git commit -m "bump ${APP_SLUG} to $VERSION"
+  if ! git push origin main; then
+    git pull --rebase origin main
+    git push origin main
+  fi
+fi
 
-# git add .
-# git commit -m "released"
-# git push
+git add .
+git commit -m "released"
+git push
 
 
 RELEASE_DONE=1
