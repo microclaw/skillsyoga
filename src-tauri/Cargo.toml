@@ -1,6 +1,6 @@
 [package]
 name = "SkillsYoga"
-version = "0.1.17"
+version = "0.1.18"
 description = "Desktop skill manager for AI coding tools"
 authors = ["SkillsYoga Contributors"]
 edition = "2021"
