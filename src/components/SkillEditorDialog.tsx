@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { EditorView } from "@codemirror/view";
-import { Transaction } from "@codemirror/state";
+import Editor from "@monaco-editor/react";
+import type { editor as MonacoEditor } from "monaco-editor";
 import {
   BadgeCheck,
   ChevronDown,
@@ -132,6 +131,19 @@ function createDefaultEntries(): SkillFileEntry[] {
   return [{ relativePath: "SKILL.md", isDir: false }];
 }
 
+function languageForPath(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith(".md") || lower.endsWith(".markdown")) return "markdown";
+  if (lower.endsWith(".json")) return "json";
+  if (lower.endsWith(".ts") || lower.endsWith(".tsx")) return "typescript";
+  if (lower.endsWith(".js") || lower.endsWith(".jsx")) return "javascript";
+  if (lower.endsWith(".yml") || lower.endsWith(".yaml")) return "yaml";
+  if (lower.endsWith(".toml")) return "ini";
+  if (lower.endsWith(".html")) return "html";
+  if (lower.endsWith(".css")) return "css";
+  return "plaintext";
+}
+
 export function SkillEditorDialog({
   open,
   mode,
@@ -179,9 +191,7 @@ export function SkillEditorDialog({
   const [creatingGist, setCreatingGist] = useState(false);
   const [editorUiMode, setEditorUiMode] = useState<"view" | "edit">("view");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const editorViewRef = useRef<EditorView | null>(null);
-  const nonUserChangeLogCountRef = useRef(0);
-  const userChangeLogCountRef = useRef(0);
+  const monacoEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
   const emitDiag = (event: string, data: Record<string, unknown>) => {
     const payload = JSON.stringify({
@@ -192,42 +202,6 @@ export function SkillEditorDialog({
       ...data,
     });
     void debugLog(`[SkillEditorDialog] ${payload}`).catch(() => {});
-  };
-
-  const emitEditorStyleDiag = (phase: string, view: EditorView) => {
-    const pick = (el: Element | null) => {
-      if (!(el instanceof HTMLElement)) return null;
-      const cs = window.getComputedStyle(el);
-      const rect = el.getBoundingClientRect();
-      return {
-        display: cs.display,
-        position: cs.position,
-        overflow: cs.overflow,
-        whiteSpace: cs.whiteSpace,
-        backgroundColor: cs.backgroundColor,
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-    };
-
-    const editor = view.dom.querySelector(".cm-editor");
-    const scroller = view.dom.querySelector(".cm-scroller");
-    const content = view.dom.querySelector(".cm-content");
-    const line = view.dom.querySelector(".cm-line");
-    const gutters = view.dom.querySelector(".cm-gutters");
-    const selectionLayer = view.dom.querySelector(".cm-selectionLayer");
-    const selectionBg = view.dom.querySelector(".cm-selectionBackground");
-
-    emitDiag("editor_style_diag", {
-      phase,
-      editor: pick(editor),
-      scroller: pick(scroller),
-      content: pick(content),
-      line: pick(line),
-      gutters: pick(gutters),
-      selectionLayer: pick(selectionLayer),
-      selectionBackground: pick(selectionBg),
-    });
   };
 
   useEffect(() => {
@@ -293,8 +267,6 @@ export function SkillEditorDialog({
 
   useEffect(() => {
     if (!open || mode !== "edit") return;
-    nonUserChangeLogCountRef.current = 0;
-    userChangeLogCountRef.current = 0;
     emitDiag("selected_file_changed", {
       selectedFile,
       cachedContentLength: (contentByFile[selectedFile] ?? "").length,
@@ -805,16 +777,18 @@ export function SkillEditorDialog({
     if (mode !== "edit" || !skill) {
       return;
     }
-    const editorState = editorViewRef.current?.state;
+    const editor = monacoEditorRef.current;
+    const model = editor?.getModel();
     const fullText = isReadOnly
       ? selectedContent
-      : (editorState?.doc.toString() ?? selectedContent);
+      : (model?.getValue() ?? selectedContent);
     const selectedText = isReadOnly
       ? (window.getSelection()?.toString() ?? "")
-      : (editorState
-        ? editorState.selection.ranges
-          .filter((range) => !range.empty)
-          .map((range) => editorState.doc.sliceString(range.from, range.to))
+      : (editor && model
+        ? (editor.getSelections() ?? [])
+          .filter((selection) => !selection.isEmpty())
+          .map((selection) => model.getValueInRange(selection))
+          .filter((text) => text.trim().length > 0)
           .join("\n")
         : "");
     if (!selectedText.trim()) {
@@ -1065,74 +1039,42 @@ export function SkillEditorDialog({
                 ) : isReadOnly ? (
                   <pre className="skillsyoga-view h-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap">{selectedContent}</pre>
                 ) : (
-                  <CodeMirror
+                  <Editor
                     value={selectedContent}
-                    height="100%"
-                    theme="dark"
-                    extensions={[EditorView.lineWrapping]}
-                    basicSetup={{
-                      foldGutter: false,
-                      dropCursor: false,
+                    path={selectedFile}
+                    language={languageForPath(selectedFile)}
+                    theme="vs-dark"
+                    className="skillsyoga-monaco h-full text-sm"
+                    options={{
+                      readOnly: isReadOnly,
+                      minimap: { enabled: true },
+                      scrollBeyondLastLine: false,
+                      wordWrap: "on",
+                      automaticLayout: true,
+                      fontSize: 14,
+                      lineHeight: 22,
                     }}
-                    className="skillsyoga-cm h-full text-sm"
-                    onCreateEditor={(view) => {
-                      editorViewRef.current = view;
-                      const style = window.getComputedStyle(view.contentDOM);
-                      const line = view.contentDOM.querySelector(".cm-line");
-                      const lineStyle = line ? window.getComputedStyle(line) : null;
+                    onMount={(editorInstance) => {
+                      monacoEditorRef.current = editorInstance;
                       emitDiag("editor_created", {
-                        docLength: view.state.doc.length,
-                        contentTextLength: view.contentDOM.textContent?.length ?? 0,
-                        contentColor: style.color,
-                        contentTextFillColor: style.getPropertyValue("-webkit-text-fill-color"),
-                        contentOpacity: style.opacity,
-                        lineColor: lineStyle?.color ?? null,
-                        lineTextFillColor: lineStyle?.getPropertyValue("-webkit-text-fill-color") ?? null,
-                        lineOpacity: lineStyle?.opacity ?? null,
+                        docLength: editorInstance.getModel()?.getValueLength() ?? 0,
                       });
-                      emitEditorStyleDiag("create_immediate", view);
-                      window.requestAnimationFrame(() => {
-                        emitEditorStyleDiag("create_raf", view);
-                      });
-                      window.setTimeout(() => {
-                        emitEditorStyleDiag("create_200ms", view);
-                      }, 200);
                     }}
-                    onChange={(value, viewUpdate) => {
-                        const isUserEdit = viewUpdate.transactions.some((transaction) => {
-                          const userEvent = transaction.annotation(Transaction.userEvent);
-                          return typeof userEvent === "string" && userEvent.length > 0;
-                        });
-                        if (!isUserEdit) {
-                          if (nonUserChangeLogCountRef.current < 5) {
-                            nonUserChangeLogCountRef.current += 1;
-                            emitDiag("editor_change_ignored_non_user", {
-                              nextLength: (value ?? "").length,
-                              txCount: viewUpdate.transactions.length,
-                            });
-                          }
-                          return;
-                        }
-                        if (isReadOnly) return;
-                        const nextValue = value ?? "";
-                        if (userChangeLogCountRef.current < 5) {
-                          userChangeLogCountRef.current += 1;
-                          emitDiag("editor_change_user", {
-                            nextLength: nextValue.length,
-                          });
-                        }
-                        setContentByFile((prev) => ({
-                          ...prev,
-                          [selectedFile]: nextValue,
-                        }));
-                        setDirtyFiles((prev) => {
-                          const next = new Set(prev);
-                          const baseline = savedByFile[selectedFile] ?? "";
-                          if (nextValue !== baseline) next.add(selectedFile);
-                          else next.delete(selectedFile);
-                          return next;
-                        });
-                      }}
+                    onChange={(value) => {
+                      if (isReadOnly) return;
+                      const nextValue = value ?? "";
+                      setContentByFile((prev) => ({
+                        ...prev,
+                        [selectedFile]: nextValue,
+                      }));
+                      setDirtyFiles((prev) => {
+                        const next = new Set(prev);
+                        const baseline = savedByFile[selectedFile] ?? "";
+                        if (nextValue !== baseline) next.add(selectedFile);
+                        else next.delete(selectedFile);
+                        return next;
+                      });
+                    }}
                   />
                 )}
               </div>
