@@ -21,6 +21,8 @@ These instructions apply to the entire `skillsyoga` repository.
 - Support multi-file skills and nested folders.
 - Keep file-tree operations stable: create, rename, delete, reveal in finder.
 - Deletions should move to Trash (not hard delete).
+- Use **Monaco Editor** for the in-app code editor. Do not reintroduce CodeMirror.
+- Keep Monaco defaults aligned with current product behavior: dark theme and right-side minimap enabled.
 - Respect current editor mode:
   - `View` mode: read-only behavior.
   - `Edit` mode: editing actions enabled.
@@ -41,6 +43,8 @@ These instructions apply to the entire `skillsyoga` repository.
 - Keep changes consistent with existing architecture (Tauri + React + TypeScript).
 - Prefer maintainable, reusable UI components over ad-hoc event hacks.
 - When fixing UI interactions, favor robust component primitives (Radix/shadcn patterns).
+- Keep Tauri security config in sync across `src-tauri/tauri.conf.json` and `src-tauri/tauri.conf.homebrew.json`.
+- Current baseline: CSP is disabled (`app.security.csp: null`) and release devtools are enabled.
 
 ## Release Process
 
