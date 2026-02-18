@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "SkillsYoga"
-version = "0.1.30"
+version = "0.1.31"
 dependencies = [
  "reqwest 0.12.28",
  "serde",
