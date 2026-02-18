@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView } from "@codemirror/view";
+import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import {
   BadgeCheck,
   ChevronDown,
@@ -984,7 +984,7 @@ export function SkillEditorDialog({
                   <CodeMirror
                     value={selectedContent}
                     height="100%"
-                    theme={oneDark}
+                    theme={vscodeDark}
                     editable={!isReadOnly}
                     readOnly={isReadOnly}
                     extensions={[markdown(), EditorView.lineWrapping]}
