@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "macOS": {
+      "signingIdentity": "Developer ID Application: Feng Zhu (YPV49M8592)",
+      "entitlements": "./Entitlements.Homebrew.plist",
+      "files": null
+    }
+  }
+}
