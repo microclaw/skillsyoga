@@ -18,6 +18,24 @@ use crate::skills::{
 use crate::state::{app_data_dir, load_state, save_state};
 use crate::tools::{built_in_tools, curated_sources, find_tool_by_id, tool_input_to_info};
 
+fn diag_enabled() -> bool {
+    env::var("SKILLSYOGA_DIAG")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn diag_log(message: &str) {
+    if diag_enabled() {
+        eprintln!("[skillsyoga-diag] {message}");
+    }
+}
+
+#[tauri::command]
+pub fn debug_log(message: String) -> Result<(), AppError> {
+    diag_log(&format!("[frontend] {message}"));
+    Ok(())
+}
+
 fn normalize_relative_path(input: &str) -> Result<PathBuf, AppError> {
     let raw = input.trim();
     if raw.is_empty() {
@@ -205,6 +223,12 @@ pub fn list_skill_files(
             .then_with(|| b.is_dir.cmp(&a.is_dir))
     });
 
+    diag_log(&format!(
+        "[backend] list_skill_files path={} entries={}",
+        skill_root.display(),
+        entries.len()
+    ));
+
     Ok(entries)
 }
 
@@ -231,7 +255,13 @@ pub fn read_skill_entry(
         )));
     }
 
-    fs::read_to_string(target).map_err(AppError::from)
+    let content = fs::read_to_string(&target)?;
+    diag_log(&format!(
+        "[backend] read_skill_entry file={} chars={}",
+        target.display(),
+        content.chars().count()
+    ));
+    Ok(content)
 }
 
 #[tauri::command]

@@ -98,6 +98,10 @@
   color: #e6edf3 !important;
 }
 
+.skillsyoga-cm .cm-content * {
+  color: inherit !important;
+}
+
 .skillsyoga-cm .cm-cursor,
 .skillsyoga-cm .cm-dropCursor {
   border-left-color: #e6edf3 !important;
@@ -117,4 +121,9 @@
 .skillsyoga-cm .cm-selectionBackground,
 .skillsyoga-cm .cm-content ::selection {
   background: rgba(56, 139, 253, 0.28) !important;
+}
+
+.skillsyoga-view {
+  background: #0b0f14;
+  color: #e6edf3;
 }

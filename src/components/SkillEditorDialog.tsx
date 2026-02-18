@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
+import { Transaction } from "@codemirror/state";
 import {
   BadgeCheck,
   ChevronDown,
@@ -21,6 +21,7 @@ import {
   createGithubGist,
   deleteSkillEmptyDir,
   deleteSkillEntry,
+  debugLog,
   deleteSkill,
   listSkillFiles,
   renameSkillEntry,
@@ -179,6 +180,19 @@ export function SkillEditorDialog({
   const [editorUiMode, setEditorUiMode] = useState<"view" | "edit">("view");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const editorViewRef = useRef<EditorView | null>(null);
+  const nonUserChangeLogCountRef = useRef(0);
+  const userChangeLogCountRef = useRef(0);
+
+  const emitDiag = (event: string, data: Record<string, unknown>) => {
+    const payload = JSON.stringify({
+      event,
+      mode,
+      editorUiMode,
+      selectedFile,
+      ...data,
+    });
+    void debugLog(`[SkillEditorDialog] ${payload}`).catch(() => {});
+  };
 
   useEffect(() => {
     if (!open) {
@@ -205,7 +219,17 @@ export function SkillEditorDialog({
           setContentByFile({ [preferred]: text });
           setSavedByFile({ [preferred]: text });
           setDirtyFiles(new Set());
+          emitDiag("open_edit_skill_loaded", {
+            skillPath: skill.path,
+            preferredFile: preferred,
+            fileCount: finalEntries.length,
+            textLength: text.length,
+          });
         } catch (error) {
+          emitDiag("open_edit_skill_failed", {
+            skillPath: skill.path,
+            error: String(error),
+          });
           toast.error(`Failed loading skill files: ${String(error)}`);
         }
       })();
@@ -230,6 +254,17 @@ export function SkillEditorDialog({
   }, [defaultEditorMode, mode, open]);
 
   const isReadOnly = mode === "edit" && editorUiMode === "view";
+
+  useEffect(() => {
+    if (!open || mode !== "edit") return;
+    nonUserChangeLogCountRef.current = 0;
+    userChangeLogCountRef.current = 0;
+    emitDiag("selected_file_changed", {
+      selectedFile,
+      cachedContentLength: (contentByFile[selectedFile] ?? "").length,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode, selectedFile]);
 
   const isHiddenByCollapsedParent = (relativePath: string) => {
     const parts = relativePath.split("/");
@@ -261,7 +296,15 @@ export function SkillEditorDialog({
         next.delete(relativePath);
         return next;
       });
+      emitDiag("load_file_success", {
+        relativePath,
+        textLength: text.length,
+      });
     } catch (error) {
+      emitDiag("load_file_failed", {
+        relativePath,
+        error: String(error),
+      });
       toast.error(`Failed reading file: ${String(error)}`);
     } finally {
       setLoadingFile(false);
@@ -727,13 +770,15 @@ export function SkillEditorDialog({
       return;
     }
     const editorState = editorViewRef.current?.state;
-    const fullText = editorState?.doc.toString() ?? "";
-    const selectedText = editorState
-      ? editorState.selection.ranges
-        .filter((range) => !range.empty)
-        .map((range) => editorState.doc.sliceString(range.from, range.to))
-        .join("\n")
-      : "";
+    const fullText = isReadOnly ? selectedContent : (editorState?.doc.toString() ?? "");
+    const selectedText = isReadOnly
+      ? (window.getSelection()?.toString() ?? "")
+      : (editorState
+        ? editorState.selection.ranges
+          .filter((range) => !range.empty)
+          .map((range) => editorState.doc.sliceString(range.from, range.to))
+          .join("\n")
+        : "");
     if (!selectedText.trim()) {
       window.alert("Please select text before creating a gist.");
       return;
@@ -979,14 +1024,14 @@ export function SkillEditorDialog({
               <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border">
                 {loadingFile ? (
                   <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading file...</div>
+                ) : isReadOnly ? (
+                  <pre className="skillsyoga-view h-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap">{selectedContent}</pre>
                 ) : (
                   <CodeMirror
                     value={selectedContent}
                     height="100%"
                     theme="dark"
-                    editable={!isReadOnly}
-                    readOnly={isReadOnly}
-                    extensions={[markdown(), EditorView.lineWrapping]}
+                    extensions={[EditorView.lineWrapping]}
                     basicSetup={{
                       foldGutter: false,
                       dropCursor: false,
@@ -994,10 +1039,33 @@ export function SkillEditorDialog({
                     className="skillsyoga-cm h-full text-sm"
                     onCreateEditor={(view) => {
                       editorViewRef.current = view;
+                      emitDiag("editor_created", {
+                        docLength: view.state.doc.length,
+                      });
                     }}
-                    onChange={(value) => {
+                    onChange={(value, viewUpdate) => {
+                        const isUserEdit = viewUpdate.transactions.some((transaction) => {
+                          const userEvent = transaction.annotation(Transaction.userEvent);
+                          return typeof userEvent === "string" && userEvent.length > 0;
+                        });
+                        if (!isUserEdit) {
+                          if (nonUserChangeLogCountRef.current < 5) {
+                            nonUserChangeLogCountRef.current += 1;
+                            emitDiag("editor_change_ignored_non_user", {
+                              nextLength: (value ?? "").length,
+                              txCount: viewUpdate.transactions.length,
+                            });
+                          }
+                          return;
+                        }
                         if (isReadOnly) return;
                         const nextValue = value ?? "";
+                        if (userChangeLogCountRef.current < 5) {
+                          userChangeLogCountRef.current += 1;
+                          emitDiag("editor_change_user", {
+                            nextLength: nextValue.length,
+                          });
+                        }
                         setContentByFile((prev) => ({
                           ...prev,
                           [selectedFile]: nextValue,

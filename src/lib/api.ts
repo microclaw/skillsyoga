@@ -104,3 +104,7 @@ export async function setSkillEditorDefaultMode(mode: "view" | "edit") {
 export async function copySkillToTool(request: CopySkillToToolRequest) {
   return invoke<SkillInfo>("copy_skill_to_tool", { request });
 }
+
+export async function debugLog(message: string) {
+  return invoke<void>("debug_log", { message });
+}

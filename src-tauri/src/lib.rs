@@ -8,7 +8,7 @@ mod tools;
 
 use commands::{
     copy_skill_to_tool, create_github_gist, create_skill_dir, delete_custom_tool, delete_skill, delete_skill_empty_dir,
-    delete_skill_entry, get_dashboard_data, install_from_registry, install_skill_from_github,
+    delete_skill_entry, debug_log, get_dashboard_data, install_from_registry, install_skill_from_github,
     list_skill_files, read_skill_entry, read_skill_file, rename_skill_entry, reorder_tools,
     reveal_in_finder, save_skill_entry, save_skill_file, search_skills, set_github_token,
     set_skill_editor_default_mode, set_tool_enabled, upsert_custom_tool,
@@ -41,7 +41,8 @@ pub fn run() {
             reveal_in_finder,
             set_github_token,
             set_skill_editor_default_mode,
-            create_github_gist
+            create_github_gist,
+            debug_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
