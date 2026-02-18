@@ -13,6 +13,8 @@ TAP_REPO="${TAP_REPO:-everettjf/homebrew-tap}"
 TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 CASK_PATH="${CASK_PATH:-Casks/${APP_SLUG}.rb}"
+APP_HOMEPAGE="${APP_HOMEPAGE:-}"
+APP_DESC="${APP_DESC:-A desktop skill manager for AI coding tools.}"
 
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-Developer ID Application: Feng Zhu (YPV49M8592)}"
 NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-}"
@@ -23,6 +25,32 @@ APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-${APPLE_PASSWORD:-${
 SKIP_BUMP="${SKIP_BUMP:-0}"
 SKIP_NOTARIZE="${SKIP_NOTARIZE:-0}"
 SKIP_CASK_UPDATE="${SKIP_CASK_UPDATE:-0}"
+
+infer_release_repo() {
+  local remote
+  remote="$(git remote get-url origin 2>/dev/null || true)"
+  if [[ "$remote" =~ ^git@github\.com:([^/]+/[^/]+)(\.git)?$ ]]; then
+    echo "${BASH_REMATCH[1]%.git}"
+    return
+  fi
+  if [[ "$remote" =~ ^https://github\.com/([^/]+/[^/]+)(\.git)?$ ]]; then
+    echo "${BASH_REMATCH[1]%.git}"
+    return
+  fi
+  if [[ "$remote" =~ ^ssh://git@github\.com/([^/]+/[^/]+)(\.git)?$ ]]; then
+    echo "${BASH_REMATCH[1]%.git}"
+    return
+  fi
+}
+
+RELEASE_REPO="${RELEASE_REPO:-$(infer_release_repo)}"
+if [ -z "$RELEASE_REPO" ]; then
+  echo "Unable to infer GitHub repo from origin. Set RELEASE_REPO=owner/repo." >&2
+  exit 1
+fi
+if [ -z "$APP_HOMEPAGE" ]; then
+  APP_HOMEPAGE="https://github.com/$RELEASE_REPO"
+fi
 
 read_version() {
   node -p "require('$REPO_DIR/package.json').version"
@@ -187,13 +215,25 @@ if [ "$SKIP_CASK_UPDATE" != "1" ]; then
   fi
 
   cd "$TAP_DIR"
+  mkdir -p "$(dirname "$CASK_PATH")"
   if [ ! -f "$CASK_PATH" ]; then
-    echo "Cask not found: $TAP_DIR/$CASK_PATH" >&2
-    exit 1
-  fi
+    cat > "$CASK_PATH" <<EOF
+cask "$APP_SLUG" do
+  version "$VERSION"
+  sha256 "$SHA256"
 
-  sed -i '' "s/^  version \".*\"/  version \"$VERSION\"/" "$CASK_PATH"
-  sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" "$CASK_PATH"
+  url "https://github.com/$RELEASE_REPO/releases/download/v#{version}/$APP_NAME.dmg"
+  name "$APP_NAME"
+  desc "$APP_DESC"
+  homepage "$APP_HOMEPAGE"
+
+  app "$APP_NAME.app"
+end
+EOF
+  else
+    sed -i '' "s/^  version \".*\"/  version \"$VERSION\"/" "$CASK_PATH"
+    sed -i '' "s/^  sha256 \".*\"/  sha256 \"$SHA256\"/" "$CASK_PATH"
+  fi
 
   git add "$CASK_PATH"
   git commit -m "bump ${APP_SLUG} to $VERSION"

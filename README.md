@@ -116,6 +116,9 @@ Optional release environment variables:
 - `NOTARYTOOL_PROFILE` or (`APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_SPECIFIC_PASSWORD`)
 - `TAP_REPO` (default: `everettjf/homebrew-tap`)
 - `CASK_PATH` (default: `Casks/skillsyoga.rb`)
+- `RELEASE_REPO` (default: inferred from `git remote origin`, e.g. `microclaw/skillsyoga`)
+- `APP_HOMEPAGE`
+- `APP_DESC`
 - `SKIP_BUMP=1`
 - `SKIP_NOTARIZE=1`
 - `SKIP_CASK_UPDATE=1`
