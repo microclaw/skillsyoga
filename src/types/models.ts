@@ -96,3 +96,8 @@ export interface CreateGitHubGistRequest {
   filePath: string;
   selectedText: string;
 }
+
+export interface CopySkillToToolRequest {
+  sourcePath: string;
+  targetToolId: string;
+}

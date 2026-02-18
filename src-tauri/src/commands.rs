@@ -7,8 +7,8 @@ use std::{
 use crate::error::AppError;
 use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir};
 use crate::models::{
-    CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, InstallFromRegistryRequest,
-    InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
+    CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats,
+    InstallFromRegistryRequest, InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
     SearchSkillsResponse, SkillFileEntry, SkillInfo,
 };
 use crate::skills::{
@@ -674,6 +674,48 @@ pub fn set_skill_editor_default_mode(app: tauri::AppHandle, mode: String) -> Res
     let mut state = load_state(&app)?;
     state.skill_editor_default_mode = clean;
     save_state(&app, &state)
+}
+
+#[tauri::command]
+pub fn copy_skill_to_tool(
+    app: tauri::AppHandle,
+    request: CopySkillToToolRequest,
+) -> Result<SkillInfo, AppError> {
+    let source_dir = PathBuf::from(&request.source_path);
+    is_path_under_skills_root(&source_dir, &app)?;
+    if !source_dir.exists() || !source_dir.is_dir() {
+        return Err(AppError::NotFound(format!(
+            "Source skill folder does not exist: {}",
+            request.source_path
+        )));
+    }
+    let source_skill_file = source_dir.join("SKILL.md");
+    if !source_skill_file.exists() {
+        return Err(AppError::Validation(
+            "Source folder is not a valid skill (missing SKILL.md)".to_string(),
+        ));
+    }
+
+    let target_tool = find_tool_by_id(&app, &request.target_tool_id)?;
+    let target_skills_root = PathBuf::from(&target_tool.skills_path);
+    ensure_dir(&target_skills_root)?;
+
+    let source_dir_name = dir_display_name(&source_dir);
+    let target_dir = unique_dir(&target_skills_root, &slugify(&source_dir_name));
+    copy_dir_recursive(&source_dir, &target_dir)?;
+
+    let content = fs::read_to_string(target_dir.join("SKILL.md"))?;
+    let skill_meta = parse_skill_metadata(&content, &source_dir_name);
+
+    Ok(SkillInfo {
+        id: format!("{}:{}", target_tool.id, slugify(&skill_meta.name)),
+        name: skill_meta.name,
+        description: skill_meta.description,
+        path: target_dir.to_string_lossy().to_string(),
+        source: target_tool.id.clone(),
+        enabled_for: vec![target_tool.id.clone()],
+        updated_at: now_iso(),
+    })
 }
 
 #[tauri::command]

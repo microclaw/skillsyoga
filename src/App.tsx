@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Check,
   FolderPlus,
+  GitMerge,
   Plus,
   RefreshCw,
   Search,
@@ -11,10 +13,12 @@ import {
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
 import { useDashboard } from "@/hooks/use-dashboard";
-import { deleteCustomTool, reorderTools, setToolEnabled, upsertCustomTool } from "@/lib/api";
+import { copySkillToTool, deleteCustomTool, reorderTools, setToolEnabled, upsertCustomTool } from "@/lib/api";
 import type { SkillInfo, ToolInfo } from "@/types/models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Sidebar,
   SidebarContent,
@@ -60,6 +64,15 @@ function App() {
   const [editor, setEditor] = useState<SkillEditorState>({ open: false, mode: "create" });
   const [customToolOpen, setCustomToolOpen] = useState(false);
   const [appVersion, setAppVersion] = useState(__APP_VERSION__);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [syncSkill, setSyncSkill] = useState<SkillInfo | null>(null);
+  const [syncTargetIds, setSyncTargetIds] = useState<string[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; toolName: string }>({
+    current: 0,
+    total: 0,
+    toolName: "",
+  });
 
   useEffect(() => {
     void (async () => {
@@ -118,6 +131,65 @@ function App() {
   );
 
   const searchPlaceholder = view === "skills" ? "Search skills" : view === "tools" ? "Search tools" : null;
+  const eligibleSyncTools = useMemo(() => {
+    if (!data || !syncSkill) return [];
+    const enabledFor = new Set(syncSkill.enabledFor);
+    return data.tools.filter((tool) => tool.enabled && !enabledFor.has(tool.id));
+  }, [data, syncSkill]);
+
+  const toggleSyncTarget = (toolId: string, checked: boolean) => {
+    setSyncTargetIds((prev) => {
+      if (checked) return Array.from(new Set([...prev, toolId]));
+      return prev.filter((id) => id !== toolId);
+    });
+  };
+
+  const openSyncDialog = (skill: SkillInfo) => {
+    setSyncSkill(skill);
+    setSyncTargetIds([]);
+    setSyncProgress({ current: 0, total: 0, toolName: "" });
+    setSyncDialogOpen(true);
+  };
+
+  const runSync = async () => {
+    if (!syncSkill || !data) return;
+    const targets = data.tools.filter((tool) => syncTargetIds.includes(tool.id));
+    if (targets.length === 0) {
+      toast.error("Select at least one target tool");
+      return;
+    }
+    let success = 0;
+    const failed: string[] = [];
+    setSyncing(true);
+    setSyncProgress({ current: 0, total: targets.length, toolName: "" });
+    try {
+      for (let i = 0; i < targets.length; i += 1) {
+        const target = targets[i];
+        setSyncProgress({ current: i + 1, total: targets.length, toolName: target.name });
+        try {
+          await copySkillToTool({
+            sourcePath: syncSkill.path,
+            targetToolId: target.id,
+          });
+          success += 1;
+        } catch {
+          failed.push(target.name);
+        }
+      }
+      await refresh();
+      if (failed.length === 0) {
+        toast.success(`Synced to ${success} tool${success > 1 ? "s" : ""}`);
+      } else {
+        toast.error(`Synced ${success}, failed ${failed.length}: ${failed.join(", ")}`);
+      }
+      setSyncDialogOpen(false);
+      setSyncSkill(null);
+      setSyncTargetIds([]);
+    } finally {
+      setSyncing(false);
+      setSyncProgress({ current: 0, total: 0, toolName: "" });
+    }
+  };
 
   return (
     <div className="dark h-screen overflow-hidden bg-background text-foreground">
@@ -214,6 +286,7 @@ function App() {
                 loading={loading}
                 skills={filteredSkills}
                 onEdit={(skill) => setEditor({ open: true, mode: "edit", source: skill })}
+                onSync={openSyncDialog}
               />
             )}
             {view === "tools" && data && (
@@ -282,6 +355,105 @@ function App() {
           await refresh();
         }}
       />
+
+      <Dialog
+        open={syncDialogOpen}
+        onOpenChange={(open) => {
+          if (syncing) return;
+          setSyncDialogOpen(open);
+          if (!open) {
+            setSyncSkill(null);
+            setSyncTargetIds([]);
+            setSyncProgress({ current: 0, total: 0, toolName: "" });
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitMerge className="size-4" />
+              Sync Skill to Tools
+            </DialogTitle>
+            <DialogDescription>
+              {syncSkill
+                ? `Copy "${syncSkill.name}" to selected enabled tools.`
+                : "Select target tools."}
+            </DialogDescription>
+          </DialogHeader>
+          {syncing ? (
+            <div className="space-y-2 rounded-md border border-border p-3 text-sm">
+              <p className="font-medium">Sync in progress</p>
+              <p className="text-muted-foreground">
+                {syncProgress.current}/{syncProgress.total}
+                {syncProgress.toolName ? ` · ${syncProgress.toolName}` : ""}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {eligibleSyncTools.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No additional enabled tools available.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <Label>Target Tools</Label>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setSyncTargetIds(eligibleSyncTools.map((tool) => tool.id))}
+                      >
+                        Select all
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setSyncTargetIds([])}
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+                    {eligibleSyncTools.map((tool) => {
+                      const checked = syncTargetIds.includes(tool.id);
+                      return (
+                        <label key={tool.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/40">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={checked}
+                            onChange={(event) => toggleSyncTarget(tool.id, event.currentTarget.checked)}
+                          />
+                          <span className="text-sm">{tool.name}</span>
+                          {checked && <Check className="ml-auto size-3.5 text-emerald-400" />}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={syncing}
+              onClick={() => {
+                setSyncDialogOpen(false);
+                setSyncSkill(null);
+                setSyncTargetIds([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button disabled={syncing || syncTargetIds.length === 0} onClick={() => void runSync()}>
+              {syncing ? "Syncing..." : "Start Sync"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Toaster position="top-right" richColors />
     </div>

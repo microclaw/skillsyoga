@@ -157,3 +157,10 @@ pub struct SaveSkillEntryRequest {
     pub relative_path: String,
     pub content: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopySkillToToolRequest {
+    pub source_path: String,
+    pub target_tool_id: String,
+}

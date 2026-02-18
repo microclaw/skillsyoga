@@ -7,7 +7,7 @@ mod state;
 mod tools;
 
 use commands::{
-    create_github_gist, create_skill_dir, delete_custom_tool, delete_skill, delete_skill_empty_dir,
+    copy_skill_to_tool, create_github_gist, create_skill_dir, delete_custom_tool, delete_skill, delete_skill_empty_dir,
     delete_skill_entry, get_dashboard_data, install_from_registry, install_skill_from_github,
     list_skill_files, read_skill_entry, read_skill_file, rename_skill_entry, reorder_tools,
     reveal_in_finder, save_skill_entry, save_skill_file, search_skills, set_github_token,
@@ -34,6 +34,7 @@ pub fn run() {
             install_skill_from_github,
             search_skills,
             install_from_registry,
+            copy_skill_to_tool,
             upsert_custom_tool,
             delete_custom_tool,
             reorder_tools,

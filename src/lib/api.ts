@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  CopySkillToToolRequest,
   CreateGitHubGistRequest,
   CustomToolInput,
   DashboardData,
@@ -98,4 +99,8 @@ export async function createGithubGist(request: CreateGitHubGistRequest) {
 
 export async function setSkillEditorDefaultMode(mode: "view" | "edit") {
   return invoke<void>("set_skill_editor_default_mode", { mode });
+}
+
+export async function copySkillToTool(request: CopySkillToToolRequest) {
+  return invoke<SkillInfo>("copy_skill_to_tool", { request });
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LayoutGrid, List, Pencil, Sparkles } from "lucide-react";
+import { GitMerge, LayoutGrid, List, Pencil, Sparkles } from "lucide-react";
 import type { SkillInfo } from "@/types/models";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,13 @@ export function SkillsView({
   loading,
   skills,
   onEdit,
+  onSync,
 }: {
   installedCount: number;
   loading: boolean;
   skills: SkillInfo[];
   onEdit: (skill: SkillInfo) => void;
+  onSync: (skill: SkillInfo) => void;
 }) {
   const [layout, setLayout] = useState<LayoutMode>(getStoredLayout);
 
@@ -117,9 +119,14 @@ export function SkillsView({
                     </Badge>
                   ))}
                 </div>
-                <Button variant="ghost" size="icon" className="size-6 shrink-0" onClick={() => onEdit(skill)}>
-                  <Pencil className="size-3" />
-                </Button>
+                <div className="flex items-center gap-0.5">
+                  <Button variant="ghost" size="icon" className="size-6 shrink-0" title="Sync to tools" onClick={() => onSync(skill)}>
+                    <GitMerge className="size-3" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="size-6 shrink-0" title="Edit skill" onClick={() => onEdit(skill)}>
+                    <Pencil className="size-3" />
+                  </Button>
+                </div>
               </div>
             </Card>
           ))}
@@ -153,9 +160,14 @@ export function SkillsView({
                   </Badge>
                 ))}
               </div>
-              <Button variant="ghost" size="icon" className="size-6 shrink-0 opacity-0 group-hover:opacity-100" onClick={() => onEdit(skill)}>
-                <Pencil className="size-3" />
-              </Button>
+              <div className="flex items-center gap-0.5">
+                <Button variant="ghost" size="icon" className="size-6 shrink-0 opacity-0 group-hover:opacity-100" title="Sync to tools" onClick={() => onSync(skill)}>
+                  <GitMerge className="size-3" />
+                </Button>
+                <Button variant="ghost" size="icon" className="size-6 shrink-0 opacity-0 group-hover:opacity-100" title="Edit skill" onClick={() => onEdit(skill)}>
+                  <Pencil className="size-3" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
