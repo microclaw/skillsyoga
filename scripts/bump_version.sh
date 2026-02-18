@@ -37,15 +37,43 @@ const parts = version.split('.').map(Number);
 if (parts.length !== 3 || parts.some(Number.isNaN)) {
   throw new Error('Invalid semver version: ' + version);
 }
+const hasDigitFour = (arr) => arr.some((n) => String(n).includes('4'));
+const fixDigitFour = (arr) => {
+  while (hasDigitFour(arr)) {
+    if (String(arr[0]).includes('4')) {
+      arr[0] += 1; arr[1] = 0; arr[2] = 0;
+      continue;
+    }
+    if (String(arr[1]).includes('4')) {
+      arr[1] += 1; arr[2] = 0;
+      continue;
+    }
+    if (String(arr[2]).includes('4')) {
+      arr[2] += 1;
+    }
+  }
+};
+const bumpByPart = (arr, target) => {
+  if (target === 'major') {
+    arr[0] += 1; arr[1] = 0; arr[2] = 0;
+  } else if (target === 'minor') {
+    arr[1] += 1; arr[2] = 0;
+  } else if (target === 'patch') {
+    arr[2] += 1;
+  } else {
+    throw new Error('Unknown part: ' + target);
+  }
+};
 if (part === 'major') {
-  parts[0] += 1; parts[1] = 0; parts[2] = 0;
+  bumpByPart(parts, 'major');
 } else if (part === 'minor') {
-  parts[1] += 1; parts[2] = 0;
+  bumpByPart(parts, 'minor');
 } else if (part === 'patch') {
-  parts[2] += 1;
+  bumpByPart(parts, 'patch');
 } else {
   throw new Error('Unknown part: ' + part);
 }
+fixDigitFour(parts);
 process.stdout.write(parts.join('.'));
 " "$PART" "$OLD_VERSION"
 )"

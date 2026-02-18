@@ -106,6 +106,11 @@ Version bump scripts:
 - `./inc_minor_version.sh`
 - `./inc_major_version.sh`
 
+Versioning rule:
+
+- Any version containing the digit `4` is skipped automatically.
+- Example: `0.1.3 -> 0.1.5`, `0.3.9 -> 0.5.0`.
+
 Homebrew release script:
 
 - `./scripts/release_homebrew.sh`

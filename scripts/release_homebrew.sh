@@ -56,6 +56,10 @@ read_version() {
   node -p "require('$REPO_DIR/package.json').version"
 }
 
+contains_digit_four() {
+  [[ "$1" == *4* ]]
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "Missing required command: $1" >&2
@@ -136,7 +140,19 @@ fi
 
 TAG="v$VERSION"
 
-if [ "$DID_BUMP" -eq 1 ] && git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+if contains_digit_four "$VERSION"; then
+  echo "Version $VERSION contains digit 4, bumping patch until it is clean..."
+  while contains_digit_four "$VERSION"; do
+    NO_GIT=1 "$REPO_DIR/scripts/bump_version.sh" patch
+    DID_BUMP=1
+    VERSION="$(read_version)"
+  done
+  echo "Adjusted version: $VERSION"
+fi
+
+TAG="v$VERSION"
+
+if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
   echo "Tag already exists: $TAG" >&2
   exit 1
 fi
@@ -215,6 +231,12 @@ if [ "$SKIP_CASK_UPDATE" != "1" ]; then
   fi
 
   cd "$TAP_DIR"
+  git fetch origin
+  if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+    git checkout main
+  fi
+  git pull --rebase origin main
+
   mkdir -p "$(dirname "$CASK_PATH")"
   if [ ! -f "$CASK_PATH" ]; then
     cat > "$CASK_PATH" <<EOF
@@ -237,7 +259,10 @@ EOF
 
   git add "$CASK_PATH"
   git commit -m "bump ${APP_SLUG} to $VERSION"
-  git push
+  if ! git push origin main; then
+    git pull --rebase origin main
+    git push origin main
+  fi
 fi
 
 RELEASE_DONE=1
