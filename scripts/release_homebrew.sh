@@ -10,7 +10,7 @@ VERSION_FILES=("package.json" "src-tauri/Cargo.toml" "src-tauri/tauri.conf.json"
 APP_NAME="${APP_NAME:-SkillsYoga}"
 APP_SLUG="${APP_SLUG:-skillsyoga}"
 TAP_REPO="${TAP_REPO:-microclaw/homebrew-tap}"
-TAP_DIR_DEFAULT="$ROOT_DIR/../homebrew-tap"
+TAP_DIR_DEFAULT="$ROOT_DIR/tmp/homebrew-tap"
 TAP_DIR="${TAP_DIR:-$TAP_DIR_DEFAULT}"
 CASK_PATH="${CASK_PATH:-Casks/${APP_SLUG}.rb}"
 APP_HOMEPAGE="${APP_HOMEPAGE:-}"
@@ -226,7 +226,12 @@ fi
 if [ "$SKIP_CASK_UPDATE" != "1" ]; then
   SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')
 
+  if [ "$TAP_DIR" = "$TAP_DIR_DEFAULT" ] && [ -d "$TAP_DIR" ]; then
+    rm -rf "$TAP_DIR"
+  fi
+
   if [ ! -d "$TAP_DIR/.git" ]; then
+    mkdir -p "$(dirname "$TAP_DIR")"
     git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
   fi
 
