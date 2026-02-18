@@ -25,6 +25,7 @@ APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-${APPLE_PASSWORD:-${
 SKIP_BUMP="${SKIP_BUMP:-0}"
 SKIP_NOTARIZE="${SKIP_NOTARIZE:-0}"
 SKIP_CASK_UPDATE="${SKIP_CASK_UPDATE:-0}"
+FORCE_CLEAN_BUILD="${FORCE_CLEAN_BUILD:-1}"
 
 infer_release_repo() {
   local remote
@@ -160,6 +161,10 @@ fi
 cp "$TAURI_HOMEBREW_CONFIG" "$TMP_CONFIG"
 if [ -n "$SIGNING_IDENTITY" ]; then
   sed -i '' "s|Developer ID Application: Feng Zhu (YPV49M8592)|$SIGNING_IDENTITY|g" "$TMP_CONFIG"
+fi
+
+if [ "$FORCE_CLEAN_BUILD" = "1" ]; then
+  rm -rf "$REPO_DIR/src-tauri/target"
 fi
 
 APPLE_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD" bun run tauri build --config "$TMP_CONFIG"
