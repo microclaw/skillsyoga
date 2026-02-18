@@ -32,7 +32,6 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
-    "@uiw/codemirror-theme-vscode": "^4.25.4",
     "@uiw/react-codemirror": "^4.25.4",
     "lucide-react": "^0.564.0",
     "radix-ui": "^1.4.3",

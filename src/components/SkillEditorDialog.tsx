@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
-import { vscodeDark } from "@uiw/codemirror-theme-vscode";
 import {
   BadgeCheck,
   ChevronDown,
@@ -984,7 +983,7 @@ export function SkillEditorDialog({
                   <CodeMirror
                     value={selectedContent}
                     height="100%"
-                    theme={vscodeDark}
+                    theme="dark"
                     editable={!isReadOnly}
                     readOnly={isReadOnly}
                     extensions={[markdown(), EditorView.lineWrapping]}
@@ -992,7 +991,7 @@ export function SkillEditorDialog({
                       foldGutter: false,
                       dropCursor: false,
                     }}
-                    className="h-full text-sm"
+                    className="skillsyoga-cm h-full text-sm"
                     onCreateEditor={(view) => {
                       editorViewRef.current = view;
                     }}

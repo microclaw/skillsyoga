@@ -84,3 +84,37 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* Keep CodeMirror readable in packaged WebKit builds even if theme injection fails. */
+.skillsyoga-cm .cm-editor {
+  height: 100%;
+  background: #0b0f14;
+  color: #e6edf3;
+}
+
+.skillsyoga-cm .cm-scroller,
+.skillsyoga-cm .cm-content,
+.skillsyoga-cm .cm-line {
+  color: #e6edf3 !important;
+}
+
+.skillsyoga-cm .cm-cursor,
+.skillsyoga-cm .cm-dropCursor {
+  border-left-color: #e6edf3 !important;
+}
+
+.skillsyoga-cm .cm-gutters {
+  background: #0b0f14;
+  color: #8b949e;
+  border-right: 1px solid rgba(230, 237, 243, 0.12);
+}
+
+.skillsyoga-cm .cm-activeLine,
+.skillsyoga-cm .cm-activeLineGutter {
+  background: rgba(56, 139, 253, 0.14);
+}
+
+.skillsyoga-cm .cm-selectionBackground,
+.skillsyoga-cm .cm-content ::selection {
+  background: rgba(56, 139, 253, 0.28) !important;
+}
