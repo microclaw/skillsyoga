@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
+  Copy,
   FolderPlus,
   GitMerge,
   Plus,
@@ -44,6 +45,11 @@ import { CustomToolDialog } from "@/components/CustomToolDialog";
 
 type ViewKey = "skills" | "tools" | "marketplace" | "settings";
 
+const RELEASES_URL = "https://github.com/microclaw/skillsyoga/releases";
+const RELEASES_API_LATEST_URL = "https://api.github.com/repos/microclaw/skillsyoga/releases/latest";
+const UPDATE_REMINDER_UNTIL_KEY = "skillsyoga.update.remindUntil";
+const HOMEBREW_UPGRADE_COMMAND = "brew update && brew upgrade --cask skillsyoga";
+
 const NAV_ITEMS: Array<{ key: ViewKey; label: string; icon: typeof Sparkles }> = [
   { key: "skills", label: "Skills", icon: Sparkles },
   { key: "marketplace", label: "Find Skills", icon: ShoppingBag },
@@ -55,6 +61,30 @@ interface SkillEditorState {
   open: boolean;
   mode: "create" | "edit";
   source?: SkillInfo;
+}
+
+function parseVersion(version: string) {
+  const core = version.trim().replace(/^v/i, "").split("-")[0];
+  const parts = core.split(".").map((part) => Number.parseInt(part, 10));
+  if (parts.length === 0 || parts.some((part) => Number.isNaN(part))) {
+    return null;
+  }
+  return parts;
+}
+
+function isVersionGreater(a: string, b: string) {
+  const left = parseVersion(a);
+  const right = parseVersion(b);
+  if (!left || !right) return false;
+
+  const length = Math.max(left.length, right.length);
+  for (let i = 0; i < length; i += 1) {
+    const lv = left[i] ?? 0;
+    const rv = right[i] ?? 0;
+    if (lv > rv) return true;
+    if (lv < rv) return false;
+  }
+  return false;
 }
 
 function App() {
@@ -73,6 +103,8 @@ function App() {
     total: 0,
     toolName: "",
   });
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -84,6 +116,34 @@ function App() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (!appVersion) return;
+
+    const remindUntilRaw = window.localStorage.getItem(UPDATE_REMINDER_UNTIL_KEY);
+    const remindUntil = remindUntilRaw ? Number.parseInt(remindUntilRaw, 10) : 0;
+    if (Number.isFinite(remindUntil) && remindUntil > Date.now()) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const response = await fetch(RELEASES_API_LATEST_URL, {
+          headers: { Accept: "application/vnd.github+json" },
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { tag_name?: string; name?: string };
+        const latest = payload.tag_name ?? payload.name ?? "";
+        if (!latest) return;
+        if (isVersionGreater(latest, appVersion)) {
+          setLatestVersion(latest);
+          setUpdateDialogOpen(true);
+        }
+      } catch {
+        // Ignore update check errors and keep app startup uninterrupted.
+      }
+    })();
+  }, [appVersion]);
 
   useEffect(() => {
     setSearch("");
@@ -235,9 +295,20 @@ function App() {
             </SidebarGroup>
           </SidebarContent>
           <SidebarFooter>
-            <div className="h-8 rounded-md border border-sidebar-border px-3 text-xs leading-8 text-muted-foreground">
-              v{appVersion}
-            </div>
+            {latestVersion ? (
+              <button
+                type="button"
+                className="w-full rounded-md border border-sidebar-border px-3 py-2 text-left text-xs text-muted-foreground hover:bg-sidebar-accent/40"
+                onClick={() => setUpdateDialogOpen(true)}
+              >
+                <p>v{appVersion}</p>
+                <p className="mt-0.5 text-emerald-400">Update available: {latestVersion}</p>
+              </button>
+            ) : (
+              <div className="h-8 rounded-md border border-sidebar-border px-3 text-xs leading-8 text-muted-foreground">
+                v{appVersion}
+              </div>
+            )}
           </SidebarFooter>
         </Sidebar>
         <SidebarInset className="min-h-0 min-w-0 overflow-hidden">
@@ -450,6 +521,75 @@ function App() {
             </Button>
             <Button disabled={syncing || syncTargetIds.length === 0} onClick={() => void runSync()}>
               {syncing ? "Syncing..." : "Start Sync"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New version available</DialogTitle>
+            <DialogDescription>
+              {latestVersion
+                ? `SkillsYoga ${latestVersion} is available. You are currently using ${appVersion}.`
+                : "A new SkillsYoga version is available."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="rounded-md border border-border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium">Upgrade method 1: Homebrew</p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7"
+                  aria-label="Copy Homebrew command"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(HOMEBREW_UPGRADE_COMMAND);
+                      toast.success("Homebrew command copied");
+                    } catch {
+                      toast.error("Failed to copy command");
+                    }
+                  }}
+                >
+                  <Copy className="size-4" />
+                </Button>
+              </div>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">{HOMEBREW_UPGRADE_COMMAND}</p>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <p className="font-medium">Upgrade method 2: Download and replace</p>
+              <button
+                type="button"
+                className="mt-1 break-all text-left text-xs text-blue-400 underline underline-offset-2 hover:text-blue-300"
+                onClick={async () => {
+                  try {
+                    const { openUrl } = await import("@tauri-apps/plugin-opener");
+                    await openUrl(RELEASES_URL);
+                  } catch {
+                    toast.error("Failed to open release page");
+                  }
+                }}
+              >
+                {RELEASES_URL}
+              </button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUpdateDialogOpen(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                const remindUntil = Date.now() + 7 * 24 * 60 * 60 * 1000;
+                window.localStorage.setItem(UPDATE_REMINDER_UNTIL_KEY, String(remindUntil));
+                setUpdateDialogOpen(false);
+              }}
+            >
+              Do not remind me for 7 days
             </Button>
           </DialogFooter>
         </DialogContent>
