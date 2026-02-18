@@ -49,8 +49,7 @@ You can create, edit, organize, and import skills without manually switching bet
 ### Install via Homebrew (macOS)
 
 ```bash
-brew tap everettjf/homebrew-tap
-brew install --cask skillsyoga
+brew tap everettjf/homebrew-tap && brew install --cask skillsyoga
 ```
 
 Upgrade:
