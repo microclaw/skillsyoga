@@ -226,11 +226,11 @@ fi
 if [ "$SKIP_CASK_UPDATE" != "1" ]; then
   SHA256=$(shasum -a 256 "$RELEASE_DMG_PATH" | awk '{print $1}')
 
-  if [ "$TAP_DIR" = "$TAP_DIR_DEFAULT" ] && [ -d "$TAP_DIR" ]; then
+  if [ "$TAP_DIR" = "$TAP_DIR_DEFAULT" ]; then
     rm -rf "$TAP_DIR"
-  fi
-
-  if [ ! -d "$TAP_DIR/.git" ]; then
+    mkdir -p "$(dirname "$TAP_DIR")"
+    git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
+  elif [ ! -d "$TAP_DIR/.git" ]; then
     mkdir -p "$(dirname "$TAP_DIR")"
     git clone "https://github.com/$TAP_REPO.git" "$TAP_DIR"
   fi
