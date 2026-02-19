@@ -18,7 +18,7 @@
         "minWidth": 1180,
         "minHeight": 760,
         "resizable": true,
-        "devtools": true,
+        "devtools": false,
         "titleBarStyle": "Visible",
         "backgroundColor": "#171717"
       }
