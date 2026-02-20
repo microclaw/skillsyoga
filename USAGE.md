@@ -38,6 +38,7 @@ Skill 是一个包含 `SKILL.md` 文件的目录。AI 编程工具（如 Cursor�
 - **Antigravity** — `~/.gemini/antigravity`
 - **Trae** — `~/.trae`
 - **OpenClaw** — `~/.openclaw`
+- **MicroClaw** — `~/.microclaw`
 
 已检测到的工具会显示绿色 **Detected** 标签。用开关按钮启用或禁用工具——只有启用的工具的 Skills 才会出现在 Skills 页面。
 
