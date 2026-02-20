@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Cable, Check, CircleAlert, Download, Loader2, Search, Sparkles } from "lucide-react";
+import { Cable, Check, CircleAlert, Download, ExternalLink, Loader2, Search, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { installFromRegistry, installSkillFromGithub, searchSkills } from "@/lib/api";
 import type { SearchSkillResult, SourceInfo, ToolInfo } from "@/types/models";
@@ -89,6 +89,20 @@ export function MarketplaceView({
       setSearching(false);
     }
   }, []);
+
+  const openExternal = async (url: string) => {
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const openSkillDetails = (result: SearchSkillResult) => {
+    const detailsUrl = `https://skills.sh/${result.source}/${result.skillId}`;
+    void openExternal(detailsUrl);
+  };
 
   const onSearchChange = (value: string) => {
     setSearchQuery(value);
@@ -245,7 +259,16 @@ export function MarketplaceView({
                   {searchResults.map((result) => (
                     <div
                       key={result.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2.5"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openSkillDetails(result)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openSkillDetails(result);
+                        }
+                      }}
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border/70 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 truncate">
@@ -253,6 +276,7 @@ export function MarketplaceView({
                           <Badge variant="secondary" className="text-[10px]">
                             {formatInstalls(result.installs)} installs
                           </Badge>
+                          <ExternalLink className="size-3 text-muted-foreground" />
                         </div>
                         <div className="text-xs text-muted-foreground truncate">
                           {result.skillId} · {result.source}
@@ -262,7 +286,10 @@ export function MarketplaceView({
                         size="sm"
                         variant="default"
                         disabled={!installReady}
-                        onClick={() => openInstallDialog(result)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openInstallDialog(result);
+                        }}
                       >
                         <Download className="size-3.5" />
                         Install
