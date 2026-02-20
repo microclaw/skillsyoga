@@ -26,6 +26,12 @@ function formatInstalls(n: number): string {
 type InstallPhase = "select" | "installing" | "done" | "error";
 type MarketplaceMode = "discover" | "import";
 const QUICK_QUERIES = ["react", "testing", "python", "devops", "prompting"];
+const MIN_INSTALLING_FEEDBACK_MS = 1200;
+const INSTALL_PROGRESS_TICK_MS = 180;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export function MarketplaceView({
   sources,
@@ -54,6 +60,10 @@ export function MarketplaceView({
   const [dialogToolId, setDialogToolId] = useState("");
   const [installPhase, setInstallPhase] = useState<InstallPhase>("select");
   const [installError, setInstallError] = useState("");
+  const [installProgress, setInstallProgress] = useState(0);
+  const [installStatusText, setInstallStatusText] = useState("Preparing installation...");
+  const installStartedAtRef = useRef<number>(0);
+  const installProgressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const toolOptions = tools.filter((tool) => tool.enabled && tool.detected);
   const detectedCount = tools.filter((tool) => tool.detected).length;
@@ -69,8 +79,36 @@ export function MarketplaceView({
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (installProgressTimerRef.current) clearInterval(installProgressTimerRef.current);
     };
   }, []);
+
+  const stopInstallProgressFeedback = () => {
+    if (installProgressTimerRef.current) {
+      clearInterval(installProgressTimerRef.current);
+      installProgressTimerRef.current = null;
+    }
+  };
+
+  const startInstallProgressFeedback = () => {
+    stopInstallProgressFeedback();
+    installStartedAtRef.current = Date.now();
+    setInstallProgress(6);
+    setInstallStatusText("Preparing workspace...");
+    setInstallPhase("installing");
+
+    installProgressTimerRef.current = setInterval(() => {
+      setInstallProgress((prev) => {
+        const next = Math.min(prev + Math.max(1, Math.round((92 - prev) * 0.18)), 92);
+        if (next >= 70) {
+          setInstallStatusText("Finalizing files...");
+        } else if (next >= 35) {
+          setInstallStatusText("Downloading skill files...");
+        }
+        return next;
+      });
+    }, INSTALL_PROGRESS_TICK_MS);
+  };
 
   const doSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -117,25 +155,37 @@ export function MarketplaceView({
     setDialogToolId(toolOptions.length > 0 ? toolOptions[0].id : "");
     setInstallPhase("select");
     setInstallError("");
+    setInstallProgress(0);
+    setInstallStatusText("Preparing installation...");
   };
 
   const closeInstallDialog = () => {
     if (installPhase === "installing") return;
+    stopInstallProgressFeedback();
     setDialogSkill(null);
   };
 
   const doInstallFromRegistry = async () => {
     if (!dialogSkill || !dialogToolId) return;
     try {
-      setInstallPhase("installing");
+      startInstallProgressFeedback();
       await installFromRegistry({
         source: dialogSkill.source,
         skillId: dialogSkill.skillId,
         targetToolId: dialogToolId,
       });
-      setInstallPhase("done");
       await onInstalled();
+      const elapsed = Date.now() - installStartedAtRef.current;
+      if (elapsed < MIN_INSTALLING_FEEDBACK_MS) {
+        await wait(MIN_INSTALLING_FEEDBACK_MS - elapsed);
+      }
+      stopInstallProgressFeedback();
+      setInstallProgress(100);
+      setInstallStatusText("Installation complete.");
+      await wait(220);
+      setInstallPhase("done");
     } catch (error) {
+      stopInstallProgressFeedback();
       setInstallError(String(error));
       setInstallPhase("error");
     }
@@ -354,7 +404,18 @@ export function MarketplaceView({
           {installPhase === "installing" && (
             <div className="flex flex-col items-center gap-3 py-6">
               <Loader2 className="size-8 animate-spin text-primary" />
-              <p className="text-sm text-muted-foreground">Cloning repository and installing skill...</p>
+              <div className="w-full max-w-sm space-y-2">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out"
+                    style={{ width: `${installProgress}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{installStatusText}</span>
+                  <span>{installProgress}%</span>
+                </div>
+              </div>
             </div>
           )}
 
