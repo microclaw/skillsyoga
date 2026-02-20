@@ -71,7 +71,6 @@ function SortableToolCard({
               ) : (
                 <Badge variant="secondary" className="text-[10px] leading-none">Not detected</Badge>
               )}
-              {tool.cli && <Badge variant="outline" className="text-[10px] leading-none">CLI</Badge>}
             </div>
             <p className="mt-1.5 truncate text-xs text-muted-foreground">{formatDisplayPath(tool.configPath)}</p>
             <p className="truncate text-xs text-muted-foreground">{formatDisplayPath(tool.skillsPath)}</p>

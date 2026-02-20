@@ -460,7 +460,6 @@ pub fn upsert_custom_tool(
         name: tool.name,
         config_path: tool.config_path,
         skills_path: tool.skills_path,
-        cli: tool.cli,
     };
 
     if let Some(existing) = state

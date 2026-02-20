@@ -66,7 +66,7 @@ export function CustomToolDialog({
     }
 
     try {
-      await onSaved({ id, name, configPath, skillsPath, cli: false });
+      await onSaved({ id, name, configPath, skillsPath });
       onOpenChange(false);
       setId("");
       setName("");

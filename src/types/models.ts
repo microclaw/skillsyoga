@@ -8,7 +8,6 @@ export interface ToolInfo {
   skillsPath: string;
   detected: boolean;
   enabled: boolean;
-  cli: boolean;
 }
 
 export interface SkillInfo {
@@ -70,7 +69,6 @@ export interface CustomToolInput {
   name: string;
   configPath: string;
   skillsPath: string;
-  cli: boolean;
 }
 
 export interface SearchSkillResult {

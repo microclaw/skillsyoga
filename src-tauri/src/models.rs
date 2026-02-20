@@ -11,7 +11,6 @@ pub struct ToolInfo {
     pub skills_path: String,
     pub detected: bool,
     pub enabled: bool,
-    pub cli: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,7 +119,6 @@ pub struct CustomToolInput {
     pub name: String,
     pub config_path: String,
     pub skills_path: String,
-    pub cli: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
