@@ -55,13 +55,6 @@ pub fn built_in_tools() -> Vec<CustomToolInput> {
             cli: false,
         },
         CustomToolInput {
-            id: "microclaw".to_string(),
-            name: "MicroClaw".to_string(),
-            config_path: "~/.microclaw".to_string(),
-            skills_path: "~/.microclaw/skills".to_string(),
-            cli: false,
-        },
-        CustomToolInput {
             id: "opencode".to_string(),
             name: "OpenCode".to_string(),
             config_path: "~/.config/opencode".to_string(),
@@ -136,6 +129,13 @@ pub fn built_in_tools() -> Vec<CustomToolInput> {
             name: "Baidu Comate".to_string(),
             config_path: "~/.comate".to_string(),
             skills_path: "~/.comate/skills".to_string(),
+            cli: false,
+        },
+        CustomToolInput {
+            id: "microclaw".to_string(),
+            name: "MicroClaw".to_string(),
+            config_path: "~/.microclaw".to_string(),
+            skills_path: "~/.microclaw/skills".to_string(),
             cli: false,
         },
     ]
