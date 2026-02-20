@@ -9,14 +9,14 @@ use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, un
 use crate::models::{
     CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, DiscoveredSkillsRoot,
     InstallFromRegistryRequest, InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
-    SearchSkillsResponse, SkillFileEntry, SkillInfo,
+    SearchSkillsResponse, SkillFileEntry, SkillInfo, UpdateSkillFromGithubRequest,
 };
 use crate::skills::{
     collect_skills_from_tool, copy_dir_recursive, dir_display_name, discover_skill_dir, discover_skills_roots,
-    discover_skill_dir_by_name, merge_skills, parse_skill_metadata,
+    discover_skill_dir_by_name, merge_skills, parse_skill_metadata, write_skill_source_meta,
 };
 use crate::state::{app_data_dir, load_state, save_state};
-use crate::tools::{built_in_tools, curated_sources, find_tool_by_id, tool_input_to_info};
+use crate::tools::{built_in_tools, curated_sources, find_tool_by_id, resolve_tools, tool_input_to_info};
 
 fn diag_enabled() -> bool {
     env::var("SKILLSYOGA_DIAG")
@@ -426,6 +426,8 @@ pub fn save_skill_file(
         source: tool.id.clone(),
         enabled_for: vec![tool.id],
         updated_at: now_iso(),
+        github_repo_url: None,
+        github_skill_path: None,
     })
 }
 
@@ -560,9 +562,15 @@ pub fn install_skill_from_github(
     }
 
     let default_name = dir_display_name(&source_dir);
+    let source_rel = source_dir
+        .strip_prefix(&temp_root)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .filter(|v| !v.is_empty() && v != ".");
 
     let target = unique_dir(&skills_root, &slugify(&default_name));
     copy_dir_recursive(&source_dir, &target)?;
+    write_skill_source_meta(&target, &repo_url, source_rel.as_deref())?;
 
     let content = fs::read_to_string(target.join("SKILL.md"))?;
 
@@ -578,7 +586,137 @@ pub fn install_skill_from_github(
         source: tool.id.clone(),
         enabled_for: vec![tool.id],
         updated_at: now_iso(),
+        github_repo_url: Some(repo_url),
+        github_skill_path: source_rel,
     })
+}
+
+fn remove_dir_contents(dir: &Path) -> Result<(), AppError> {
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            fs::remove_dir_all(path)?;
+        } else {
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir_contents(source: &Path, target: &Path) -> Result<(), AppError> {
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            copy_dir_recursive(&source_path, &target_path)?;
+        } else {
+            fs::copy(&source_path, &target_path)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn update_skill_from_github(
+    app: tauri::AppHandle,
+    request: UpdateSkillFromGithubRequest,
+) -> Result<SkillInfo, AppError> {
+    let repo_url = request.repo_url.trim().to_string();
+    if !repo_url.starts_with("https://github.com/") {
+        return Err(AppError::Validation(
+            "Only GitHub repository URLs are supported".to_string(),
+        ));
+    }
+
+    let skill_root = PathBuf::from(&request.path);
+    is_path_under_skills_root(&skill_root, &app)?;
+    if !skill_root.exists() || !skill_root.is_dir() {
+        return Err(AppError::NotFound(format!(
+            "Skill folder does not exist: {}",
+            skill_root.display()
+        )));
+    }
+
+    let temp_root = env::temp_dir().join(format!("skillsyoga-{}", now_iso()));
+    ensure_dir(&temp_root)?;
+
+    let clone_output = Command::new("git")
+        .arg("clone")
+        .arg("--depth")
+        .arg("1")
+        .arg(&repo_url)
+        .arg(&temp_root)
+        .output()
+        .map_err(|e| AppError::Git(format!("Failed to start git: {e}")))?;
+
+    if !clone_output.status.success() {
+        let stderr = String::from_utf8_lossy(&clone_output.stderr);
+        let _ = fs::remove_dir_all(&temp_root);
+        return Err(AppError::Git(format!("git clone failed: {stderr}")));
+    }
+
+    let source_dir = if let Some(skill_path) = request.skill_path {
+        temp_root.join(skill_path)
+    } else {
+        discover_skill_dir(&temp_root, 0).ok_or_else(|| {
+            AppError::NotFound(
+                "Unable to determine skill directory automatically; provide `skillPath`"
+                    .to_string(),
+            )
+        })?
+    };
+
+    if !source_dir.exists() || !source_dir.join("SKILL.md").exists() {
+        let _ = fs::remove_dir_all(&temp_root);
+        return Err(AppError::NotFound(format!(
+            "Skill folder invalid: {}",
+            source_dir.to_string_lossy()
+        )));
+    }
+
+    let source_rel = source_dir
+        .strip_prefix(&temp_root)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .filter(|v| !v.is_empty() && v != ".");
+
+    let update_result: Result<SkillInfo, AppError> = (|| {
+        remove_dir_contents(&skill_root)?;
+        copy_dir_contents(&source_dir, &skill_root)?;
+        write_skill_source_meta(&skill_root, &repo_url, source_rel.as_deref())?;
+
+        let content = fs::read_to_string(skill_root.join("SKILL.md"))?;
+        let default_name = dir_display_name(&skill_root);
+        let skill_meta = parse_skill_metadata(&content, &default_name);
+
+        let tools = resolve_tools(&app)?;
+        let tool_id = tools
+            .iter()
+            .find(|tool| skill_root.starts_with(PathBuf::from(&tool.skills_path)))
+            .map(|tool| tool.id.clone())
+            .ok_or_else(|| {
+                AppError::NotFound("Could not determine tool for updated skill path".to_string())
+            })?;
+
+        Ok(SkillInfo {
+            id: format!("{}:{}", tool_id, slugify(&skill_meta.name)),
+            name: skill_meta.name,
+            description: skill_meta.description,
+            path: skill_root.to_string_lossy().to_string(),
+            source: tool_id.clone(),
+            enabled_for: vec![tool_id],
+            updated_at: now_iso(),
+            github_repo_url: Some(repo_url.clone()),
+            github_skill_path: source_rel.clone(),
+        })
+    })();
+
+    let _ = fs::remove_dir_all(&temp_root);
+    update_result
 }
 
 #[tauri::command]
@@ -645,8 +783,14 @@ pub fn install_from_registry(
     }
 
     let default_name = dir_display_name(&source_dir);
+    let source_rel = source_dir
+        .strip_prefix(&temp_root)
+        .ok()
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .filter(|v| !v.is_empty() && v != ".");
     let target = unique_dir(&skills_root, &slugify(&default_name));
     copy_dir_recursive(&source_dir, &target)?;
+    write_skill_source_meta(&target, &repo_url, source_rel.as_deref())?;
 
     let content = fs::read_to_string(target.join("SKILL.md"))?;
     let skill_meta = parse_skill_metadata(&content, &default_name);
@@ -661,6 +805,8 @@ pub fn install_from_registry(
         source: tool.id.clone(),
         enabled_for: vec![tool.id],
         updated_at: now_iso(),
+        github_repo_url: Some(repo_url),
+        github_skill_path: source_rel,
     })
 }
 
@@ -764,6 +910,8 @@ pub fn copy_skill_to_tool(
         source: target_tool.id.clone(),
         enabled_for: vec![target_tool.id.clone()],
         updated_at: now_iso(),
+        github_repo_url: None,
+        github_skill_path: None,
     })
 }
 

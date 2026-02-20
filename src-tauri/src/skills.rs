@@ -8,6 +8,17 @@ use std::{
 use crate::error::AppError;
 use crate::helpers::now_iso;
 use crate::models::{DiscoveredSkillsRoot, SkillInfo, ToolInfo};
+use serde::{Deserialize, Serialize};
+
+const SOURCE_META_FILE: &str = ".skillsyoga-source.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillSourceMeta {
+    repo_url: String,
+    #[serde(default)]
+    skill_path: Option<String>,
+}
 
 /// Extract the display name from a directory path, falling back to "skill".
 pub fn dir_display_name(path: &Path) -> String {
@@ -135,6 +146,7 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
         let content = fs::read_to_string(&root_skill_file)?;
         let dir_name = dir_display_name(&root);
         let skill_meta = parse_skill_metadata(&content, &dir_name);
+        let source_meta = read_skill_source_meta(&root);
         let file_meta = fs::metadata(&root_skill_file).ok();
         let modified = file_meta
             .and_then(|m| m.modified().ok())
@@ -150,6 +162,10 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
             source: tool.id.clone(),
             enabled_for: vec![tool.id.clone()],
             updated_at: modified,
+            github_repo_url: source_meta
+                .as_ref()
+                .map(|meta| meta.repo_url.clone()),
+            github_skill_path: source_meta.and_then(|meta| meta.skill_path),
         });
     }
 
@@ -170,6 +186,7 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
 
         let dir_name = dir_display_name(&path);
         let skill_meta = parse_skill_metadata(&content, &dir_name);
+        let source_meta = read_skill_source_meta(&path);
 
         let file_meta = fs::metadata(&skill_file).ok();
         let modified = file_meta
@@ -186,6 +203,10 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
             source: tool.id.clone(),
             enabled_for: vec![tool.id.clone()],
             updated_at: modified,
+            github_repo_url: source_meta
+                .as_ref()
+                .map(|meta| meta.repo_url.clone()),
+            github_skill_path: source_meta.and_then(|meta| meta.skill_path),
         });
     }
 
@@ -365,5 +386,37 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn read_skill_source_meta(skill_dir: &Path) -> Option<SkillSourceMeta> {
+    let meta_path = skill_dir.join(SOURCE_META_FILE);
+    let content = fs::read_to_string(meta_path).ok()?;
+    serde_json::from_str::<SkillSourceMeta>(&content).ok()
+}
+
+fn normalize_optional_rel_path(value: Option<&str>) -> Option<String> {
+    let clean = value
+        .map(|v| v.trim().replace('\\', "/"))
+        .filter(|v| !v.is_empty())?;
+    Some(clean.trim_matches('/').to_string())
+}
+
+pub fn write_skill_source_meta(
+    skill_dir: &Path,
+    repo_url: &str,
+    skill_path: Option<&str>,
+) -> Result<(), AppError> {
+    let repo = repo_url.trim();
+    if repo.is_empty() {
+        return Ok(());
+    }
+    let meta = SkillSourceMeta {
+        repo_url: repo.to_string(),
+        skill_path: normalize_optional_rel_path(skill_path),
+    };
+    let serialized = serde_json::to_string_pretty(&meta)
+        .map_err(|e| AppError::Validation(format!("Failed to serialize source metadata: {e}")))?;
+    fs::write(skill_dir.join(SOURCE_META_FILE), serialized)?;
     Ok(())
 }

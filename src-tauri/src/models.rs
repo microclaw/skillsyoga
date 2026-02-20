@@ -24,6 +24,10 @@ pub struct SkillInfo {
     pub source: String,
     pub enabled_for: Vec<String>,
     pub updated_at: String,
+    #[serde(default)]
+    pub github_repo_url: Option<String>,
+    #[serde(default)]
+    pub github_skill_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +103,14 @@ pub struct InstallSkillRequest {
     pub repo_url: String,
     pub skill_path: Option<String>,
     pub target_tool_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSkillFromGithubRequest {
+    pub path: String,
+    pub repo_url: String,
+    pub skill_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

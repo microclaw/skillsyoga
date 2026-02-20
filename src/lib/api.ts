@@ -12,6 +12,7 @@ import type {
   SkillFileEntry,
   SearchSkillResult,
   SkillInfo,
+  UpdateSkillFromGithubRequest,
 } from "@/types/models";
 
 export async function getDashboardData() {
@@ -64,6 +65,10 @@ export async function deleteSkill(path: string) {
 
 export async function installSkillFromGithub(request: InstallSkillRequest) {
   return invoke<SkillInfo>("install_skill_from_github", { request });
+}
+
+export async function updateSkillFromGithub(request: UpdateSkillFromGithubRequest) {
+  return invoke<SkillInfo>("update_skill_from_github", { request });
 }
 
 export async function upsertCustomTool(tool: CustomToolInput) {

@@ -35,6 +35,7 @@ You can create, edit, organize, and import skills without manually switching bet
 - Built-in tool detection and toggle management
 - Create, edit, rename, and delete files/folders in the skill editor
 - Import skills from GitHub repositories and curated sources
+- Update an existing skill from GitHub directly in the editor
 - Local-first storage: skills remain in each tool's own skills directory
 
 ## Supported Stack
@@ -97,6 +98,13 @@ Basic import flow:
 3. Select a source or paste a GitHub repository URL.
 4. Choose the target tool and install.
 5. Confirm the imported skill in `Skills`.
+
+Update flow for an existing skill:
+
+1. Open `Skills` and edit the target skill.
+2. Click `Update from GitHub` in the editor header.
+3. Review the prefilled repository URL/skill path (when previously installed or updated through SkillsYoga), or enter them manually.
+4. Confirm overwrite to replace the current skill files.
 
 ## Release
 

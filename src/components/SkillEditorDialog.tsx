@@ -12,6 +12,7 @@ import {
   Folder,
   FolderOpen,
   Plus,
+  RefreshCw,
   Save,
   Trash2,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   revealInFinder,
   saveSkillEntry,
   saveSkillFile,
+  updateSkillFromGithub,
 } from "@/lib/api";
 import type { SkillFileEntry, SkillInfo, ToolInfo } from "@/types/models";
 import { Button } from "@/components/ui/button";
@@ -194,6 +196,12 @@ export function SkillEditorDialog({
   const [creatingGist, setCreatingGist] = useState(false);
   const [editorUiMode, setEditorUiMode] = useState<"view" | "edit">("view");
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [updateConfirmOpen, setUpdateConfirmOpen] = useState(false);
+  const [unsavedUpdateOpen, setUnsavedUpdateOpen] = useState(false);
+  const [updateRepoUrl, setUpdateRepoUrl] = useState("");
+  const [updateSkillPath, setUpdateSkillPath] = useState("");
+  const [updatingFromGithub, setUpdatingFromGithub] = useState(false);
   const monacoEditorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
   const emitDiag = (event: string, data: Record<string, unknown>) => {
@@ -207,6 +215,43 @@ export function SkillEditorDialog({
     void debugLog(`[SkillEditorDialog] ${payload}`).catch(() => {});
   };
 
+  const loadSkillForEdit = async (targetSkill: SkillInfo, preferredPath?: string) => {
+    const files = await listSkillFiles(targetSkill.path);
+    const finalEntries = sortEntries(files);
+    setEntries(finalEntries);
+    setCollapsedDirs(new Set());
+
+    const preferred =
+      (preferredPath && finalEntries.some((entry) => !entry.isDir && entry.relativePath === preferredPath)
+        ? preferredPath
+        : null)
+      ?? finalEntries.find((e) => !e.isDir && e.relativePath === "SKILL.md")?.relativePath
+      ?? finalEntries.find((e) => !e.isDir)?.relativePath
+      ?? "SKILL.md";
+    setSelectedFile(preferred);
+    const text = await readSkillEntry(targetSkill.path, preferred);
+    setContentByFile({ [preferred]: text });
+    setSavedByFile({ [preferred]: text });
+    setDirtyFiles(new Set());
+    emitDiag("open_edit_skill_loaded", {
+      skillPath: targetSkill.path,
+      preferredFile: preferred,
+      fileCount: finalEntries.length,
+      textLength: text.length,
+    });
+  };
+
+  const discardAllDirtyFiles = () => {
+    setContentByFile((prev) => {
+      const next = { ...prev };
+      for (const dirtyFile of dirtyFiles) {
+        next[dirtyFile] = savedByFile[dirtyFile] ?? "";
+      }
+      return next;
+    });
+    setDirtyFiles(new Set());
+  };
+
   useEffect(() => {
     if (!open) {
       return;
@@ -218,26 +263,7 @@ export function SkillEditorDialog({
       setTargetToolId(skill.source || defaultTool);
       void (async () => {
         try {
-          const files = await listSkillFiles(skill.path);
-          const finalEntries = sortEntries(files);
-          setEntries(finalEntries);
-          setCollapsedDirs(new Set());
-
-          const preferred =
-            finalEntries.find((e) => !e.isDir && e.relativePath === "SKILL.md")?.relativePath
-            ?? finalEntries.find((e) => !e.isDir)?.relativePath
-            ?? "SKILL.md";
-          setSelectedFile(preferred);
-          const text = await readSkillEntry(skill.path, preferred);
-          setContentByFile({ [preferred]: text });
-          setSavedByFile({ [preferred]: text });
-          setDirtyFiles(new Set());
-          emitDiag("open_edit_skill_loaded", {
-            skillPath: skill.path,
-            preferredFile: preferred,
-            fileCount: finalEntries.length,
-            textLength: text.length,
-          });
+          await loadSkillForEdit(skill);
         } catch (error) {
           emitDiag("open_edit_skill_failed", {
             skillPath: skill.path,
@@ -255,6 +281,11 @@ export function SkillEditorDialog({
       setSavedByFile({ "SKILL.md": DEFAULT_CONTENT });
       setDirtyFiles(new Set());
     }
+    setUpdateDialogOpen(false);
+    setUpdateConfirmOpen(false);
+    setUnsavedUpdateOpen(false);
+    setUpdateRepoUrl("");
+    setUpdateSkillPath("");
   }, [mode, open, skill, tools]);
 
   useEffect(() => {
@@ -759,6 +790,67 @@ export function SkillEditorDialog({
     }
   };
 
+  const onRequestUpdateFromGithub = () => {
+    if (mode !== "edit" || !skill?.path) return;
+    setUpdateRepoUrl(skill.githubRepoUrl ?? "");
+    setUpdateSkillPath(skill.githubSkillPath ?? "");
+    if (dirtyFiles.size > 0) {
+      setUnsavedUpdateOpen(true);
+      return;
+    }
+    setUpdateDialogOpen(true);
+  };
+
+  const onUnsavedSaveAndContinueUpdate = async () => {
+    const ok = await saveCurrentFile();
+    if (!ok) return;
+    setUnsavedUpdateOpen(false);
+    setUpdateDialogOpen(true);
+  };
+
+  const onUnsavedDiscardAndContinueUpdate = () => {
+    discardAllDirtyFiles();
+    setUnsavedUpdateOpen(false);
+    setUpdateDialogOpen(true);
+  };
+
+  const onRequestConfirmUpdate = () => {
+    const trimmed = updateRepoUrl.trim();
+    if (!trimmed) {
+      toast.error("Repository URL is required");
+      return;
+    }
+    if (!trimmed.startsWith("https://github.com/")) {
+      toast.error("Only GitHub repository URLs are supported");
+      return;
+    }
+    setUpdateConfirmOpen(true);
+  };
+
+  const onConfirmUpdateFromGithub = async () => {
+    if (!skill?.path) return;
+    try {
+      setUpdatingFromGithub(true);
+      const normalizedSkillPath = normalizeRelativePath(updateSkillPath);
+      await updateSkillFromGithub({
+        path: skill.path,
+        repoUrl: updateRepoUrl.trim(),
+        skillPath: normalizedSkillPath ?? undefined,
+      });
+      await loadSkillForEdit(skill, "SKILL.md");
+      await onSaved();
+      setUpdateConfirmOpen(false);
+      setUpdateDialogOpen(false);
+      setUpdateRepoUrl("");
+      setUpdateSkillPath("");
+      toast.success("Skill updated from GitHub");
+    } catch (error) {
+      toast.error(`Failed to update skill: ${String(error)}`);
+    } finally {
+      setUpdatingFromGithub(false);
+    }
+  };
+
   const toAbsoluteEntryPath = (relativePath: string): string | null => {
     if (!skill?.path || mode !== "edit") return null;
     const sep = skill.path.includes("\\") ? "\\" : "/";
@@ -870,6 +962,15 @@ export function SkillEditorDialog({
               </div>
               {mode === "edit" && skill?.path && (
                 <div className="mr-8 flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7"
+                    title="Update from GitHub"
+                    onClick={onRequestUpdateFromGithub}
+                  >
+                    <RefreshCw className="size-4" />
+                  </Button>
                   <Button variant="ghost" size="icon" className="size-7" title="Reveal in Finder" onClick={() => void onReveal()}>
                     <FolderOpen className="size-4" />
                   </Button>
@@ -1122,6 +1223,101 @@ export function SkillEditorDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={unsavedUpdateOpen} onOpenChange={setUnsavedUpdateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              Save your changes before updating this skill from GitHub?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex sm:justify-end">
+            <Button variant="outline" onClick={() => setUnsavedUpdateOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={onUnsavedDiscardAndContinueUpdate}>
+              Discard
+            </Button>
+            <Button onClick={() => void onUnsavedSaveAndContinueUpdate()}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={updateDialogOpen}
+        onOpenChange={(nextOpen) => {
+          setUpdateDialogOpen(nextOpen);
+          if (!nextOpen) {
+            setUpdateConfirmOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Update Skill from GitHub</DialogTitle>
+            <DialogDescription>
+              This will replace all files in this skill with files from a GitHub repository.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Repository URL</div>
+              <Input
+                autoFocus
+                value={updateRepoUrl}
+                onChange={(event) => setUpdateRepoUrl(event.currentTarget.value)}
+                placeholder="https://github.com/owner/repo"
+                disabled={updatingFromGithub}
+              />
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-muted-foreground">Skill Path (optional)</div>
+              <Input
+                value={updateSkillPath}
+                onChange={(event) => setUpdateSkillPath(event.currentTarget.value)}
+                placeholder="skills/skill-name"
+                disabled={updatingFromGithub}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setUpdateDialogOpen(false)}
+              disabled={updatingFromGithub}
+            >
+              Cancel
+            </Button>
+            <Button onClick={onRequestConfirmUpdate} disabled={updatingFromGithub}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={updateConfirmOpen} onOpenChange={setUpdateConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Overwrite Skill Files?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action replaces all existing files in this skill. You can restore previous files from version control or backups.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={updatingFromGithub}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={updatingFromGithub}
+              onClick={() => void onConfirmUpdateFromGithub()}
+            >
+              {updatingFromGithub ? "Updating..." : "Update Skill"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>

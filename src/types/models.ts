@@ -19,6 +19,8 @@ export interface SkillInfo {
   source: string;
   enabledFor: string[];
   updatedAt: string;
+  githubRepoUrl?: string;
+  githubSkillPath?: string;
 }
 
 export interface SourceInfo {
@@ -55,6 +57,12 @@ export interface InstallSkillRequest {
   repoUrl: string;
   skillPath?: string;
   targetToolId: string;
+}
+
+export interface UpdateSkillFromGithubRequest {
+  path: string;
+  repoUrl: string;
+  skillPath?: string;
 }
 
 export interface CustomToolInput {
