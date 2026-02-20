@@ -35,7 +35,7 @@ Skill 是一个包含 `SKILL.md` 文件的目录。AI 编程工具（如 Cursor�
 
 - **Cursor** — `~/.cursor`
 - **Gemini CLI** — `~/.gemini`
-- **Antigravity** — `~/.antigravity`
+- **Antigravity** — `~/.gemini/antigravity`
 - **Trae** — `~/.trae`
 - **OpenClaw** — `~/.openclaw`
 

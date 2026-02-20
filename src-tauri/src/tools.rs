@@ -22,8 +22,8 @@ pub fn built_in_tools() -> Vec<CustomToolInput> {
         CustomToolInput {
             id: "antigravity".to_string(),
             name: "Antigravity".to_string(),
-            config_path: "~/.antigravity".to_string(),
-            skills_path: "~/.antigravity/skills".to_string(),
+            config_path: "~/.gemini/antigravity".to_string(),
+            skills_path: "~/.gemini/antigravity/skills".to_string(),
             cli: false,
         },
         CustomToolInput {
