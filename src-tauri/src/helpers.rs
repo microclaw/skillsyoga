@@ -70,6 +70,28 @@ pub fn unique_dir(base: &Path, preferred: &str) -> PathBuf {
     base.join(format!("{}-{}", preferred, now_iso()))
 }
 
+pub fn unique_dir_with_timestamp_on_conflict(base: &Path, preferred: &str) -> PathBuf {
+    let candidate = base.join(preferred);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let ts = now_iso();
+    let with_ts = base.join(format!("{}-{}", preferred, ts));
+    if !with_ts.exists() {
+        return with_ts;
+    }
+
+    for n in 1..1000 {
+        let path = base.join(format!("{}-{}-{}", preferred, ts, n));
+        if !path.exists() {
+            return path;
+        }
+    }
+
+    base.join(format!("{}-{}-{}", preferred, ts, now_iso()))
+}
+
 /// Check that `path` is a descendant of one of the known tool skills roots.
 /// Prevents path traversal attacks that could read/write/delete arbitrary files.
 pub fn is_path_under_skills_root(

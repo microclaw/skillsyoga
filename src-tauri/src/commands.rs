@@ -5,7 +5,9 @@ use std::{
 };
 
 use crate::error::AppError;
-use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir};
+use crate::helpers::{
+    ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir, unique_dir_with_timestamp_on_conflict,
+};
 use crate::models::{
     CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, DiscoveredSkillsRoot,
     InstallFromRegistryRequest, InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
@@ -561,13 +563,15 @@ pub fn install_skill_from_github(
     }
 
     let default_name = dir_display_name(&source_dir);
+    let source_content = fs::read_to_string(source_dir.join("SKILL.md"))?;
+    let source_skill_meta = parse_skill_metadata(&source_content, &default_name);
     let source_rel = source_dir
         .strip_prefix(&temp_root)
         .ok()
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .filter(|v| !v.is_empty() && v != ".");
 
-    let target = unique_dir(&skills_root, &slugify(&default_name));
+    let target = unique_dir(&skills_root, &slugify(&source_skill_meta.name));
     copy_dir_recursive(&source_dir, &target)?;
     write_skill_source_meta(&target, &repo_url, source_rel.as_deref())?;
 
@@ -782,12 +786,14 @@ pub fn install_from_registry(
     }
 
     let default_name = dir_display_name(&source_dir);
+    let source_content = fs::read_to_string(source_dir.join("SKILL.md"))?;
+    let source_skill_meta = parse_skill_metadata(&source_content, &default_name);
     let source_rel = source_dir
         .strip_prefix(&temp_root)
         .ok()
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .filter(|v| !v.is_empty() && v != ".");
-    let target = unique_dir(&skills_root, &slugify(&default_name));
+    let target = unique_dir(&skills_root, &slugify(&source_skill_meta.name));
     copy_dir_recursive(&source_dir, &target)?;
     write_skill_source_meta(&target, &repo_url, source_rel.as_deref())?;
 
@@ -895,7 +901,7 @@ pub fn copy_skill_to_tool(
     ensure_dir(&target_skills_root)?;
 
     let source_dir_name = dir_display_name(&source_dir);
-    let target_dir = unique_dir(&target_skills_root, &slugify(&source_dir_name));
+    let target_dir = unique_dir_with_timestamp_on_conflict(&target_skills_root, &slugify(&source_dir_name));
     copy_dir_recursive(&source_dir, &target_dir)?;
 
     let content = fs::read_to_string(target_dir.join("SKILL.md"))?;
