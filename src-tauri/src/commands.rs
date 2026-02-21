@@ -901,7 +901,38 @@ pub fn copy_skill_to_tool(
     ensure_dir(&target_skills_root)?;
 
     let source_dir_name = dir_display_name(&source_dir);
-    let target_dir = unique_dir_with_timestamp_on_conflict(&target_skills_root, &slugify(&source_dir_name));
+    let source_content = fs::read_to_string(&source_skill_file)?;
+    let source_meta = parse_skill_metadata(&source_content, &source_dir_name);
+    let preferred_name = slugify(&source_meta.name);
+    let preferred_target_dir = target_skills_root.join(&preferred_name);
+
+    let strategy = request.conflict_strategy.trim().to_lowercase();
+    let target_dir = match strategy.as_str() {
+        "overwrite" => {
+            if preferred_target_dir.exists() {
+                trash::delete(&preferred_target_dir)
+                    .map_err(|e| AppError::Io(std::io::Error::other(e.to_string())))?;
+            }
+            preferred_target_dir
+        }
+        "timestampedcopy" | "timestamped_copy" | "timestamped-copy" | "" => {
+            unique_dir_with_timestamp_on_conflict(&target_skills_root, &preferred_name)
+        }
+        _ => {
+            return Err(AppError::Validation(format!(
+                "Unsupported conflict strategy: {}",
+                request.conflict_strategy
+            )));
+        }
+    };
+
+    if target_dir.exists() {
+        return Err(AppError::Validation(format!(
+            "Target path already exists: {}",
+            target_dir.display()
+        )));
+    }
+
     copy_dir_recursive(&source_dir, &target_dir)?;
 
     let content = fs::read_to_string(target_dir.join("SKILL.md"))?;

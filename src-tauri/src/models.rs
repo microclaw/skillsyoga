@@ -173,6 +173,12 @@ pub struct SaveSkillEntryRequest {
 pub struct CopySkillToToolRequest {
     pub source_path: String,
     pub target_tool_id: String,
+    #[serde(default = "default_copy_conflict_strategy")]
+    pub conflict_strategy: String,
+}
+
+fn default_copy_conflict_strategy() -> String {
+    "timestampedCopy".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

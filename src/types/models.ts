@@ -106,6 +106,7 @@ export interface CreateGitHubGistRequest {
 export interface CopySkillToToolRequest {
   sourcePath: string;
   targetToolId: string;
+  conflictStrategy?: "overwrite" | "timestampedCopy";
 }
 
 export interface DiscoveredSkillsRoot {

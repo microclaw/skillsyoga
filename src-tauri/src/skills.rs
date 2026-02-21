@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs, io,
     path::{Path, PathBuf},
     time::UNIX_EPOCH,
@@ -280,25 +280,13 @@ pub fn discover_skills_roots(root: &Path) -> Vec<DiscoveredSkillsRoot> {
 }
 
 pub fn merge_skills(mut list: Vec<SkillInfo>) -> Vec<SkillInfo> {
-    let mut merged: HashMap<String, SkillInfo> = HashMap::new();
-
-    for skill in list.drain(..) {
-        let key = skill.name.to_lowercase();
-        if let Some(existing) = merged.get_mut(&key) {
-            let mut tool_set: HashSet<String> = existing.enabled_for.iter().cloned().collect();
-            for tool in skill.enabled_for {
-                if tool_set.insert(tool.clone()) {
-                    existing.enabled_for.push(tool);
-                }
-            }
-        } else {
-            merged.insert(key, skill);
-        }
-    }
-
-    let mut out: Vec<SkillInfo> = merged.into_values().collect();
-    out.sort_by(|a, b| a.name.cmp(&b.name));
-    out
+    list.sort_by(|a, b| {
+        a.name
+            .cmp(&b.name)
+            .then_with(|| a.source.cmp(&b.source))
+            .then_with(|| a.path.cmp(&b.path))
+    });
+    list
 }
 
 pub fn discover_skill_dir(root: &Path, depth: usize) -> Option<PathBuf> {

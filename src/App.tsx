@@ -42,6 +42,7 @@ import { MarketplaceView } from "@/views/MarketplaceView";
 import { SettingsView } from "@/views/SettingsView";
 import { SkillEditorDialog } from "@/components/SkillEditorDialog";
 import { CustomToolDialog } from "@/components/CustomToolDialog";
+import { formatDisplayPath } from "@/lib/utils";
 
 type ViewKey = "skills" | "tools" | "marketplace" | "settings";
 
@@ -62,6 +63,8 @@ interface SkillEditorState {
   mode: "create" | "edit";
   source?: SkillInfo;
 }
+
+type SyncConflictStrategy = "overwrite" | "timestampedCopy";
 
 function parseVersion(version: string) {
   const core = version.trim().replace(/^v/i, "").split("-")[0];
@@ -97,6 +100,11 @@ function App() {
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [syncSkill, setSyncSkill] = useState<SkillInfo | null>(null);
   const [syncTargetIds, setSyncTargetIds] = useState<string[]>([]);
+  const [syncConflictDialogOpen, setSyncConflictDialogOpen] = useState(false);
+  const [syncConflictTargets, setSyncConflictTargets] = useState<string[]>([]);
+  const [editSkillSelectionOpen, setEditSkillSelectionOpen] = useState(false);
+  const [editSkillSelectionName, setEditSkillSelectionName] = useState("");
+  const [editSkillCandidates, setEditSkillCandidates] = useState<SkillInfo[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; toolName: string }>({
     current: 0,
@@ -196,6 +204,15 @@ function App() {
     const enabledFor = new Set(syncSkill.enabledFor);
     return data.tools.filter((tool) => tool.enabled && !enabledFor.has(tool.id));
   }, [data, syncSkill]);
+  const syncNameConflictToolIds = useMemo(() => {
+    if (!data || !syncSkill) return new Set<string>();
+    const sourceName = syncSkill.name.trim().toLowerCase();
+    return new Set(
+      data.skills
+        .filter((skill) => skill.name.trim().toLowerCase() === sourceName)
+        .map((skill) => skill.source),
+    );
+  }, [data, syncSkill]);
 
   const toggleSyncTarget = (toolId: string, checked: boolean) => {
     setSyncTargetIds((prev) => {
@@ -208,10 +225,12 @@ function App() {
     setSyncSkill(skill);
     setSyncTargetIds([]);
     setSyncProgress({ current: 0, total: 0, toolName: "" });
+    setSyncConflictDialogOpen(false);
+    setSyncConflictTargets([]);
     setSyncDialogOpen(true);
   };
 
-  const runSync = async () => {
+  const executeSync = async (strategy: SyncConflictStrategy) => {
     if (!syncSkill || !data) return;
     const targets = data.tools.filter((tool) => syncTargetIds.includes(tool.id));
     if (targets.length === 0) {
@@ -230,6 +249,7 @@ function App() {
           await copySkillToTool({
             sourcePath: syncSkill.path,
             targetToolId: target.id,
+            conflictStrategy: strategy,
           });
           success += 1;
         } catch {
@@ -245,10 +265,57 @@ function App() {
       setSyncDialogOpen(false);
       setSyncSkill(null);
       setSyncTargetIds([]);
+      setSyncConflictDialogOpen(false);
+      setSyncConflictTargets([]);
     } finally {
       setSyncing(false);
       setSyncProgress({ current: 0, total: 0, toolName: "" });
     }
+  };
+
+  const runSync = async () => {
+    if (!syncSkill || !data) return;
+    const targets = data.tools.filter((tool) => syncTargetIds.includes(tool.id));
+    if (targets.length === 0) {
+      toast.error("Select at least one target tool");
+      return;
+    }
+
+    const conflictToolNames = targets
+      .filter((tool) => syncNameConflictToolIds.has(tool.id))
+      .map((tool) => tool.name);
+
+    if (conflictToolNames.length > 0) {
+      setSyncConflictTargets(conflictToolNames);
+      setSyncConflictDialogOpen(true);
+      return;
+    }
+
+    await executeSync("timestampedCopy");
+  };
+
+  const openEditorForSkill = (skill: SkillInfo) => {
+    setEditor({ open: true, mode: "edit", source: skill });
+  };
+
+  const requestEditSkill = (skill: SkillInfo) => {
+    if (!data) {
+      openEditorForSkill(skill);
+      return;
+    }
+    const normalizedName = skill.name.trim().toLowerCase();
+    const sameNameSkills = data.skills.filter((entry) => entry.name.trim().toLowerCase() === normalizedName);
+    if (sameNameSkills.length <= 1) {
+      openEditorForSkill(skill);
+      return;
+    }
+    setEditSkillSelectionName(skill.name);
+    setEditSkillCandidates(sameNameSkills);
+    setEditSkillSelectionOpen(true);
+  };
+
+  const skillSourceLabel = (skill: SkillInfo) => {
+    return data?.tools.find((tool) => tool.id === skill.source)?.name ?? skill.source;
   };
 
   return (
@@ -356,7 +423,7 @@ function App() {
                 installedCount={data?.stats.installedSkills ?? 0}
                 loading={loading}
                 skills={filteredSkills}
-                onEdit={(skill) => setEditor({ open: true, mode: "edit", source: skill })}
+                onEdit={requestEditSkill}
                 onSync={openSyncDialog}
               />
             )}
@@ -428,6 +495,57 @@ function App() {
       />
 
       <Dialog
+        open={editSkillSelectionOpen}
+        onOpenChange={(open) => {
+          setEditSkillSelectionOpen(open);
+          if (!open) {
+            setEditSkillSelectionName("");
+            setEditSkillCandidates([]);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Select Skill to Edit</DialogTitle>
+            <DialogDescription>
+              Multiple instances named "{editSkillSelectionName}" were found. Choose the one you want to edit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-72 space-y-2 overflow-y-auto">
+            {editSkillCandidates.map((candidate) => (
+              <button
+                type="button"
+                key={`${candidate.id}:${candidate.path}`}
+                className="w-full rounded-md border border-border p-3 text-left transition hover:bg-muted/40"
+                onClick={() => {
+                  setEditSkillSelectionOpen(false);
+                  setEditSkillSelectionName("");
+                  setEditSkillCandidates([]);
+                  openEditorForSkill(candidate);
+                }}
+              >
+                <p className="text-sm font-medium">{candidate.name}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Tool: {skillSourceLabel(candidate)}</p>
+                <p className="truncate text-xs text-muted-foreground">Path: {formatDisplayPath(candidate.path)}</p>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditSkillSelectionOpen(false);
+                setEditSkillSelectionName("");
+                setEditSkillCandidates([]);
+              }}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={syncDialogOpen}
         onOpenChange={(open) => {
           if (syncing) return;
@@ -436,6 +554,8 @@ function App() {
             setSyncSkill(null);
             setSyncTargetIds([]);
             setSyncProgress({ current: 0, total: 0, toolName: "" });
+            setSyncConflictDialogOpen(false);
+            setSyncConflictTargets([]);
           }
         }}
       >
@@ -489,6 +609,7 @@ function App() {
                   <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border p-2">
                     {eligibleSyncTools.map((tool) => {
                       const checked = syncTargetIds.includes(tool.id);
+                      const hasSameName = syncNameConflictToolIds.has(tool.id);
                       return (
                         <label key={tool.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-muted/40">
                           <input
@@ -497,7 +618,10 @@ function App() {
                             checked={checked}
                             onChange={(event) => toggleSyncTarget(tool.id, event.currentTarget.checked)}
                           />
-                          <span className="text-sm">{tool.name}</span>
+                          <span className="text-sm">
+                            {tool.name}
+                            {hasSameName ? " (already has same-name skill)" : ""}
+                          </span>
                           {checked && <Check className="ml-auto size-3.5 text-emerald-400" />}
                         </label>
                       );
@@ -515,12 +639,46 @@ function App() {
                 setSyncDialogOpen(false);
                 setSyncSkill(null);
                 setSyncTargetIds([]);
+                setSyncConflictDialogOpen(false);
+                setSyncConflictTargets([]);
               }}
             >
               Cancel
             </Button>
             <Button disabled={syncing || syncTargetIds.length === 0} onClick={() => void runSync()}>
               {syncing ? "Syncing..." : "Start Sync"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={syncConflictDialogOpen} onOpenChange={(open) => !syncing && setSyncConflictDialogOpen(open)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Skill Already Exists in Target</DialogTitle>
+            <DialogDescription>
+              The selected target tool folders below already contain a skill named "{syncSkill?.name}".
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <p className="text-muted-foreground">Choose how to proceed for this sync operation:</p>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+              {syncConflictTargets.map((toolName, index) => (
+                <p key={`${toolName}-${index}`} className="truncate text-xs text-muted-foreground">
+                  {toolName}
+                </p>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={syncing} onClick={() => setSyncConflictDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="outline" disabled={syncing} onClick={() => void executeSync("timestampedCopy")}>
+              Create Timestamped Copy
+            </Button>
+            <Button variant="destructive" disabled={syncing} onClick={() => void executeSync("overwrite")}>
+              Overwrite Existing
             </Button>
           </DialogFooter>
         </DialogContent>
