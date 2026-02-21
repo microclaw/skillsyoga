@@ -5,7 +5,9 @@ use std::{
 };
 
 use crate::error::AppError;
-use crate::helpers::{ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir};
+use crate::helpers::{
+    ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir, unique_dir_with_timestamp_on_conflict,
+};
 use crate::models::{
     CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, DiscoveredSkillsRoot,
     InstallFromRegistryRequest, InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
@@ -899,7 +901,7 @@ pub fn copy_skill_to_tool(
     ensure_dir(&target_skills_root)?;
 
     let source_dir_name = dir_display_name(&source_dir);
-    let target_dir = unique_dir(&target_skills_root, &slugify(&source_dir_name));
+    let target_dir = unique_dir_with_timestamp_on_conflict(&target_skills_root, &slugify(&source_dir_name));
     copy_dir_recursive(&source_dir, &target_dir)?;
 
     let content = fs::read_to_string(target_dir.join("SKILL.md"))?;
