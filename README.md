@@ -122,6 +122,14 @@ Versioning rule:
 Homebrew release script:
 
 - `./scripts/release_homebrew.sh`
+- `./scripts/package_macos.sh`
+- `./deploy.sh`
+
+Recommended one-command release entrypoint:
+
+```bash
+./deploy.sh
+```
 
 Optional release environment variables:
 
