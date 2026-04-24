@@ -1,13 +1,113 @@
 use std::{
     env, fs,
     path::{Component, Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use crate::error::AppError;
 use crate::helpers::{
     ensure_dir, is_path_under_skills_root, now_iso, slugify, unique_dir, unique_dir_with_timestamp_on_conflict,
 };
+
+/// Default timeout for `git clone` operations. A hostile or oversized
+/// repository shouldn't be able to keep a command worker alive indefinitely.
+const GIT_CLONE_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// RAII guard that removes a temp directory on drop, regardless of which
+/// path an enclosing function takes (success, early return, `?`, panic).
+struct TempDir {
+    path: PathBuf,
+}
+
+impl TempDir {
+    fn new(prefix: &str) -> Result<Self, AppError> {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let pid = std::process::id();
+        let path = env::temp_dir().join(format!("{prefix}-{pid}-{nanos}-{seq}"));
+        ensure_dir(&path)?;
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        if self.path.exists() {
+            if let Err(err) = fs::remove_dir_all(&self.path) {
+                eprintln!(
+                    "[skillsyoga] warn: failed to remove temp dir {}: {err}",
+                    self.path.display()
+                );
+            }
+        }
+    }
+}
+
+/// Shallow `git clone` with a hard timeout. Kills the child process if it
+/// exceeds the limit to avoid hanging on hostile or oversized repos.
+fn git_clone_shallow(repo_url: &str, dest: &Path, timeout: Duration) -> Result<(), AppError> {
+    let mut child = Command::new("git")
+        .arg("clone")
+        .arg("--depth")
+        .arg("1")
+        .arg("--single-branch")
+        .arg("--no-tags")
+        .arg("--config")
+        .arg("submodule.recurse=false")
+        .arg(repo_url)
+        .arg(dest)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| AppError::Git(format!("Failed to start git: {e}")))?;
+
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if status.success() {
+                    return Ok(());
+                }
+                let mut stderr = String::new();
+                if let Some(mut err) = child.stderr.take() {
+                    use std::io::Read;
+                    let _ = err.read_to_string(&mut stderr);
+                }
+                return Err(AppError::Git(format!(
+                    "git clone failed: {}",
+                    stderr.trim()
+                )));
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(AppError::Git(format!(
+                        "git clone timed out after {}s",
+                        timeout.as_secs()
+                    )));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(AppError::Git(format!("git wait failed: {e}")));
+            }
+        }
+    }
+}
 use crate::models::{
     CopySkillToToolRequest, CreateGistRequest, CustomToolInput, DashboardData, DashboardStats, DiscoveredSkillsRoot,
     InstallFromRegistryRequest, InstallSkillRequest, SaveSkillEntryRequest, SaveSkillRequest, SearchSkillResult,
@@ -525,28 +625,15 @@ pub fn install_skill_from_github(
     let skills_root = PathBuf::from(&tool.skills_path);
     ensure_dir(&skills_root)?;
 
-    let temp_root = env::temp_dir().join(format!("skillsyoga-{}", now_iso()));
-    ensure_dir(&temp_root)?;
+    let temp = TempDir::new("skillsyoga-install")?;
+    let temp_root = temp.path();
 
-    let clone_output = Command::new("git")
-        .arg("clone")
-        .arg("--depth")
-        .arg("1")
-        .arg(&repo_url)
-        .arg(&temp_root)
-        .output()
-        .map_err(|e| AppError::Git(format!("Failed to start git: {e}")))?;
-
-    if !clone_output.status.success() {
-        let stderr = String::from_utf8_lossy(&clone_output.stderr);
-        let _ = fs::remove_dir_all(&temp_root);
-        return Err(AppError::Git(format!("git clone failed: {stderr}")));
-    }
+    git_clone_shallow(&repo_url, temp_root, GIT_CLONE_TIMEOUT)?;
 
     let source_dir = if let Some(skill_path) = request.skill_path {
         temp_root.join(skill_path)
     } else {
-        discover_skill_dir(&temp_root, 0).ok_or_else(|| {
+        discover_skill_dir(temp_root, 0).ok_or_else(|| {
             AppError::NotFound(
                 "Unable to determine skill directory automatically; provide `skillPath`"
                     .to_string(),
@@ -555,7 +642,6 @@ pub fn install_skill_from_github(
     };
 
     if !source_dir.exists() || !source_dir.join("SKILL.md").exists() {
-        let _ = fs::remove_dir_all(&temp_root);
         return Err(AppError::NotFound(format!(
             "Skill folder invalid: {}",
             source_dir.to_string_lossy()
@@ -566,7 +652,7 @@ pub fn install_skill_from_github(
     let source_content = fs::read_to_string(source_dir.join("SKILL.md"))?;
     let source_skill_meta = parse_skill_metadata(&source_content, &default_name);
     let source_rel = source_dir
-        .strip_prefix(&temp_root)
+        .strip_prefix(temp_root)
         .ok()
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .filter(|v| !v.is_empty() && v != ".");
@@ -578,8 +664,6 @@ pub fn install_skill_from_github(
     let content = fs::read_to_string(target.join("SKILL.md"))?;
 
     let skill_meta = parse_skill_metadata(&content, &default_name);
-
-    let _ = fs::remove_dir_all(&temp_root);
 
     Ok(SkillInfo {
         id: format!("{}:{}", tool.id, slugify(&skill_meta.name)),
@@ -644,28 +728,15 @@ pub fn update_skill_from_github(
         )));
     }
 
-    let temp_root = env::temp_dir().join(format!("skillsyoga-{}", now_iso()));
-    ensure_dir(&temp_root)?;
+    let temp = TempDir::new("skillsyoga-update")?;
+    let temp_root = temp.path();
 
-    let clone_output = Command::new("git")
-        .arg("clone")
-        .arg("--depth")
-        .arg("1")
-        .arg(&repo_url)
-        .arg(&temp_root)
-        .output()
-        .map_err(|e| AppError::Git(format!("Failed to start git: {e}")))?;
-
-    if !clone_output.status.success() {
-        let stderr = String::from_utf8_lossy(&clone_output.stderr);
-        let _ = fs::remove_dir_all(&temp_root);
-        return Err(AppError::Git(format!("git clone failed: {stderr}")));
-    }
+    git_clone_shallow(&repo_url, temp_root, GIT_CLONE_TIMEOUT)?;
 
     let source_dir = if let Some(skill_path) = request.skill_path {
         temp_root.join(skill_path)
     } else {
-        discover_skill_dir(&temp_root, 0).ok_or_else(|| {
+        discover_skill_dir(temp_root, 0).ok_or_else(|| {
             AppError::NotFound(
                 "Unable to determine skill directory automatically; provide `skillPath`"
                     .to_string(),
@@ -674,7 +745,6 @@ pub fn update_skill_from_github(
     };
 
     if !source_dir.exists() || !source_dir.join("SKILL.md").exists() {
-        let _ = fs::remove_dir_all(&temp_root);
         return Err(AppError::NotFound(format!(
             "Skill folder invalid: {}",
             source_dir.to_string_lossy()
@@ -682,44 +752,39 @@ pub fn update_skill_from_github(
     }
 
     let source_rel = source_dir
-        .strip_prefix(&temp_root)
+        .strip_prefix(temp_root)
         .ok()
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .filter(|v| !v.is_empty() && v != ".");
 
-    let update_result: Result<SkillInfo, AppError> = (|| {
-        remove_dir_contents(&skill_root)?;
-        copy_dir_contents(&source_dir, &skill_root)?;
-        write_skill_source_meta(&skill_root, &repo_url, source_rel.as_deref())?;
+    remove_dir_contents(&skill_root)?;
+    copy_dir_contents(&source_dir, &skill_root)?;
+    write_skill_source_meta(&skill_root, &repo_url, source_rel.as_deref())?;
 
-        let content = fs::read_to_string(skill_root.join("SKILL.md"))?;
-        let default_name = dir_display_name(&skill_root);
-        let skill_meta = parse_skill_metadata(&content, &default_name);
+    let content = fs::read_to_string(skill_root.join("SKILL.md"))?;
+    let default_name = dir_display_name(&skill_root);
+    let skill_meta = parse_skill_metadata(&content, &default_name);
 
-        let tools = resolve_tools(&app)?;
-        let tool_id = tools
-            .iter()
-            .find(|tool| skill_root.starts_with(PathBuf::from(&tool.skills_path)))
-            .map(|tool| tool.id.clone())
-            .ok_or_else(|| {
-                AppError::NotFound("Could not determine tool for updated skill path".to_string())
-            })?;
+    let tools = resolve_tools(&app)?;
+    let tool_id = tools
+        .iter()
+        .find(|tool| skill_root.starts_with(PathBuf::from(&tool.skills_path)))
+        .map(|tool| tool.id.clone())
+        .ok_or_else(|| {
+            AppError::NotFound("Could not determine tool for updated skill path".to_string())
+        })?;
 
-        Ok(SkillInfo {
-            id: format!("{}:{}", tool_id, slugify(&skill_meta.name)),
-            name: skill_meta.name,
-            description: skill_meta.description,
-            path: skill_root.to_string_lossy().to_string(),
-            source: tool_id.clone(),
-            enabled_for: vec![tool_id],
-            updated_at: now_iso(),
-            github_repo_url: Some(repo_url.clone()),
-            github_skill_path: source_rel.clone(),
-        })
-    })();
-
-    let _ = fs::remove_dir_all(&temp_root);
-    update_result
+    Ok(SkillInfo {
+        id: format!("{}:{}", tool_id, slugify(&skill_meta.name)),
+        name: skill_meta.name,
+        description: skill_meta.description,
+        path: skill_root.to_string_lossy().to_string(),
+        source: tool_id.clone(),
+        enabled_for: vec![tool_id],
+        updated_at: now_iso(),
+        github_repo_url: Some(repo_url.clone()),
+        github_skill_path: source_rel,
+    })
 }
 
 #[tauri::command]
@@ -749,28 +814,14 @@ pub fn install_from_registry(
     let skills_root = PathBuf::from(&tool.skills_path);
     ensure_dir(&skills_root)?;
 
-    let temp_root = env::temp_dir().join(format!("skillsyoga-{}", now_iso()));
-    ensure_dir(&temp_root)?;
+    let temp = TempDir::new("skillsyoga-registry")?;
+    let temp_root = temp.path();
 
-    let clone_output = Command::new("git")
-        .arg("clone")
-        .arg("--depth")
-        .arg("1")
-        .arg(&repo_url)
-        .arg(&temp_root)
-        .output()
-        .map_err(|e| AppError::Git(format!("Failed to start git: {e}")))?;
+    git_clone_shallow(&repo_url, temp_root, GIT_CLONE_TIMEOUT)?;
 
-    if !clone_output.status.success() {
-        let stderr = String::from_utf8_lossy(&clone_output.stderr);
-        let _ = fs::remove_dir_all(&temp_root);
-        return Err(AppError::Git(format!("git clone failed: {stderr}")));
-    }
-
-    let source_dir = discover_skill_dir_by_name(&temp_root, &request.skill_id, 0)
-        .or_else(|| discover_skill_dir(&temp_root, 0))
+    let source_dir = discover_skill_dir_by_name(temp_root, &request.skill_id, 0)
+        .or_else(|| discover_skill_dir(temp_root, 0))
         .ok_or_else(|| {
-            let _ = fs::remove_dir_all(&temp_root);
             AppError::NotFound(format!(
                 "Could not find skill '{}' in repository",
                 request.skill_id
@@ -778,7 +829,6 @@ pub fn install_from_registry(
         })?;
 
     if !source_dir.join("SKILL.md").exists() {
-        let _ = fs::remove_dir_all(&temp_root);
         return Err(AppError::NotFound(format!(
             "Skill folder invalid: {}",
             source_dir.to_string_lossy()
@@ -789,7 +839,7 @@ pub fn install_from_registry(
     let source_content = fs::read_to_string(source_dir.join("SKILL.md"))?;
     let source_skill_meta = parse_skill_metadata(&source_content, &default_name);
     let source_rel = source_dir
-        .strip_prefix(&temp_root)
+        .strip_prefix(temp_root)
         .ok()
         .map(|p| p.to_string_lossy().replace('\\', "/"))
         .filter(|v| !v.is_empty() && v != ".");
@@ -799,8 +849,6 @@ pub fn install_from_registry(
 
     let content = fs::read_to_string(target.join("SKILL.md"))?;
     let skill_meta = parse_skill_metadata(&content, &default_name);
-
-    let _ = fs::remove_dir_all(&temp_root);
 
     Ok(SkillInfo {
         id: format!("{}:{}", tool.id, slugify(&skill_meta.name)),
@@ -823,22 +871,24 @@ pub fn reorder_tools(app: tauri::AppHandle, tool_order: Vec<String>) -> Result<(
 }
 
 #[tauri::command]
-pub fn reveal_in_finder(path: String) -> Result<(), AppError> {
+pub fn reveal_in_finder(app: tauri::AppHandle, path: String) -> Result<(), AppError> {
     let p = PathBuf::from(&path);
     if !p.exists() {
         return Err(AppError::NotFound(format!("Path not found: {path}")));
     }
 
+    // Only allow revealing paths that belong to a known skills directory.
+    // Prevents the frontend from asking the OS to `open -R` arbitrary files.
+    is_path_under_skills_root(&p, &app)?;
+
     #[cfg(target_os = "macos")]
     {
-        Command::new("open").arg("-R").arg(&path).spawn()?;
+        Command::new("open").arg("-R").arg(&p).spawn()?;
     }
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer")
-            .arg(format!("/select,{}", path))
-            .spawn()?;
+        Command::new("explorer").arg(format!("/select,{}", p.display())).spawn()?;
     }
 
     #[cfg(target_os = "linux")]

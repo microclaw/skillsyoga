@@ -33,7 +33,19 @@ pub fn save_state(app: &tauri::AppHandle, state: &AppState) -> Result<(), AppErr
         ensure_dir(parent)?;
     }
 
+    // Atomic write: serialize to a sibling .tmp file, then rename into place.
+    // If the process is killed between `write` and `rename`, state.json is
+    // still the previous consistent version rather than a half-written file.
     let json = serde_json::to_string_pretty(state)?;
-    fs::write(&state_path, json)?;
+    let mut tmp_path = state_path.clone();
+    let mut tmp_name = state_path
+        .file_name()
+        .map(|n| n.to_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("state.json"));
+    tmp_name.push(".tmp");
+    tmp_path.set_file_name(tmp_name);
+
+    fs::write(&tmp_path, json)?;
+    fs::rename(&tmp_path, &state_path)?;
     Ok(())
 }

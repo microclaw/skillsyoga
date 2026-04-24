@@ -13,7 +13,11 @@ export function useDashboard() {
       const next = await getDashboardData();
       setData(next);
     } catch (error) {
-      toast.error(`Failed to load dashboard: ${String(error)}`);
+      // Stable id ensures repeated refresh failures replace the previous
+      // toast instead of stacking one per click.
+      toast.error(`Failed to load dashboard: ${String(error)}`, {
+        id: "dashboard-refresh",
+      });
     } finally {
       setLoading(false);
     }

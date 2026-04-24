@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import Editor, { loader } from "@monaco-editor/react";
-import * as monaco from "monaco-editor";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
+
+// Lazy-load the Monaco editor and its bundled runtime so the ~5 MB of
+// JS/WASM only ship when the editor dialog actually opens. See
+// `LazyMonacoEditor.tsx` for the `loader.config({ monaco })` call that
+// binds the local bundle.
+const LazyMonacoEditor = lazy(() => import("./LazyMonacoEditor"));
 import {
   BadgeCheck,
   ChevronDown,
@@ -79,8 +83,6 @@ description: Describe the skill
 Describe the skill.
 `;
 const STANDARD_FOLDERS = ["scripts", "references", "assets", "prompts"];
-
-loader.config({ monaco });
 
 function sortEntries(entries: SkillFileEntry[]): SkillFileEntry[] {
   const byParent = new Map<string, SkillFileEntry[]>();
@@ -1143,43 +1145,51 @@ export function SkillEditorDialog({
                 ) : isReadOnly ? (
                   <pre className="skillsyoga-view h-full overflow-auto p-4 text-sm leading-6 whitespace-pre-wrap">{selectedContent}</pre>
                 ) : (
-                  <Editor
-                    value={selectedContent}
-                    path={selectedFile}
-                    language={languageForPath(selectedFile)}
-                    theme="vs-dark"
-                    className="skillsyoga-monaco h-full text-sm"
-                    options={{
-                      readOnly: isReadOnly,
-                      minimap: { enabled: true },
-                      scrollBeyondLastLine: false,
-                      wordWrap: "on",
-                      automaticLayout: true,
-                      fontSize: 14,
-                      lineHeight: 22,
-                    }}
-                    onMount={(editorInstance) => {
-                      monacoEditorRef.current = editorInstance;
-                      emitDiag("editor_created", {
-                        docLength: editorInstance.getModel()?.getValueLength() ?? 0,
-                      });
-                    }}
-                    onChange={(value) => {
-                      if (isReadOnly) return;
-                      const nextValue = value ?? "";
-                      setContentByFile((prev) => ({
-                        ...prev,
-                        [selectedFile]: nextValue,
-                      }));
-                      setDirtyFiles((prev) => {
-                        const next = new Set(prev);
-                        const baseline = savedByFile[selectedFile] ?? "";
-                        if (nextValue !== baseline) next.add(selectedFile);
-                        else next.delete(selectedFile);
-                        return next;
-                      });
-                    }}
-                  />
+                  <Suspense
+                    fallback={
+                      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                        Loading editor...
+                      </div>
+                    }
+                  >
+                    <LazyMonacoEditor
+                      value={selectedContent}
+                      path={selectedFile}
+                      language={languageForPath(selectedFile)}
+                      theme="vs-dark"
+                      className="skillsyoga-monaco h-full text-sm"
+                      options={{
+                        readOnly: isReadOnly,
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        wordWrap: "on",
+                        automaticLayout: true,
+                        fontSize: 14,
+                        lineHeight: 22,
+                      }}
+                      onMount={(editorInstance) => {
+                        monacoEditorRef.current = editorInstance;
+                        emitDiag("editor_created", {
+                          docLength: editorInstance.getModel()?.getValueLength() ?? 0,
+                        });
+                      }}
+                      onChange={(value) => {
+                        if (isReadOnly) return;
+                        const nextValue = value ?? "";
+                        setContentByFile((prev) => ({
+                          ...prev,
+                          [selectedFile]: nextValue,
+                        }));
+                        setDirtyFiles((prev) => {
+                          const next = new Set(prev);
+                          const baseline = savedByFile[selectedFile] ?? "";
+                          if (nextValue !== baseline) next.add(selectedFile);
+                          else next.delete(selectedFile);
+                          return next;
+                        });
+                      }}
+                    />
+                  </Suspense>
                 )}
               </div>
             </div>

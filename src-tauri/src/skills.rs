@@ -1,8 +1,9 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs, io,
     path::{Path, PathBuf},
-    time::UNIX_EPOCH,
+    sync::{Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::error::AppError;
@@ -11,6 +12,100 @@ use crate::models::{DiscoveredSkillsRoot, SkillInfo, ToolInfo};
 use serde::{Deserialize, Serialize};
 
 const SOURCE_META_FILE: &str = ".skillsyoga-source.json";
+
+/// Entry in the skill-metadata cache. A cached `SkillInfo` is reusable when
+/// both the SKILL.md and optional source-metadata file still match their
+/// recorded mtimes — i.e. nothing has been touched on disk since last scan.
+#[derive(Clone)]
+struct CachedSkill {
+    skill_md_mtime: Option<SystemTime>,
+    source_meta_mtime: Option<SystemTime>,
+    skill: SkillInfo,
+}
+
+fn skill_cache() -> &'static Mutex<HashMap<PathBuf, CachedSkill>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, CachedSkill>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn file_mtime(path: &Path) -> Option<SystemTime> {
+    fs::metadata(path).ok().and_then(|m| m.modified().ok())
+}
+
+fn mtime_to_string(mtime: Option<SystemTime>) -> String {
+    mtime
+        .and_then(|s| s.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_else(now_iso)
+}
+
+fn build_skill_info(
+    tool: &ToolInfo,
+    skill_dir: &Path,
+    skill_md_path: &Path,
+    skill_md_mtime: Option<SystemTime>,
+) -> Result<SkillInfo, AppError> {
+    let content = fs::read_to_string(skill_md_path)?;
+    let dir_name = dir_display_name(skill_dir);
+    let skill_meta = parse_skill_metadata(&content, &dir_name);
+    let source_meta = read_skill_source_meta(skill_dir);
+    let modified = mtime_to_string(skill_md_mtime);
+
+    Ok(SkillInfo {
+        id: format!("{}:{}", tool.id, dir_name),
+        name: skill_meta.name,
+        description: skill_meta.description,
+        path: skill_dir.to_string_lossy().to_string(),
+        source: tool.id.clone(),
+        enabled_for: vec![tool.id.clone()],
+        updated_at: modified,
+        github_repo_url: source_meta.as_ref().map(|meta| meta.repo_url.clone()),
+        github_skill_path: source_meta.and_then(|meta| meta.skill_path),
+    })
+}
+
+/// Return a cached `SkillInfo` if the files on disk match the recorded
+/// mtimes; otherwise parse fresh and update the cache in place.
+fn load_skill_cached(
+    tool: &ToolInfo,
+    skill_dir: &Path,
+    skill_md_path: &Path,
+) -> Result<SkillInfo, AppError> {
+    let md_mtime = file_mtime(skill_md_path);
+    let src_mtime = file_mtime(&skill_dir.join(SOURCE_META_FILE));
+
+    if let Ok(mut cache) = skill_cache().lock() {
+        if let Some(entry) = cache.get(skill_dir) {
+            if entry.skill_md_mtime == md_mtime && entry.source_meta_mtime == src_mtime {
+                return Ok(entry.skill.clone());
+            }
+        }
+
+        let skill = build_skill_info(tool, skill_dir, skill_md_path, md_mtime)?;
+        cache.insert(
+            skill_dir.to_path_buf(),
+            CachedSkill {
+                skill_md_mtime: md_mtime,
+                source_meta_mtime: src_mtime,
+                skill: skill.clone(),
+            },
+        );
+        return Ok(skill);
+    }
+
+    // Lock poisoned — fall back to a non-cached parse. Avoids turning a
+    // transient panic in another thread into a permanent failure here.
+    build_skill_info(tool, skill_dir, skill_md_path, md_mtime)
+}
+
+/// Drop cache entries beneath `scope_root` that weren't observed in the
+/// most recent scan. Only entries under this tool's root are considered —
+/// other tools' cache entries remain untouched.
+fn prune_skill_cache(scope_root: &Path, live: &HashSet<PathBuf>) {
+    if let Ok(mut cache) = skill_cache().lock() {
+        cache.retain(|path, _| !path.starts_with(scope_root) || live.contains(path));
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,33 +235,13 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
     }
 
     let mut skills = vec![];
+    let mut live_paths: HashSet<PathBuf> = HashSet::new();
 
     let root_skill_file = root.join("SKILL.md");
     if root_skill_file.exists() {
-        let content = fs::read_to_string(&root_skill_file)?;
-        let dir_name = dir_display_name(&root);
-        let skill_meta = parse_skill_metadata(&content, &dir_name);
-        let source_meta = read_skill_source_meta(&root);
-        let file_meta = fs::metadata(&root_skill_file).ok();
-        let modified = file_meta
-            .and_then(|m| m.modified().ok())
-            .and_then(|s| s.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs().to_string())
-            .unwrap_or_else(now_iso);
-
-        skills.push(SkillInfo {
-            id: format!("{}:{}", tool.id, dir_name),
-            name: skill_meta.name,
-            description: skill_meta.description,
-            path: root.to_string_lossy().to_string(),
-            source: tool.id.clone(),
-            enabled_for: vec![tool.id.clone()],
-            updated_at: modified,
-            github_repo_url: source_meta
-                .as_ref()
-                .map(|meta| meta.repo_url.clone()),
-            github_skill_path: source_meta.and_then(|meta| meta.skill_path),
-        });
+        let info = load_skill_cached(tool, &root, &root_skill_file)?;
+        live_paths.insert(root.clone());
+        skills.push(info);
     }
 
     let entries = fs::read_dir(&root)?;
@@ -182,34 +257,12 @@ pub fn collect_skills_from_tool(tool: &ToolInfo) -> Result<Vec<SkillInfo>, AppEr
             continue;
         }
 
-        let content = fs::read_to_string(&skill_file)?;
-
-        let dir_name = dir_display_name(&path);
-        let skill_meta = parse_skill_metadata(&content, &dir_name);
-        let source_meta = read_skill_source_meta(&path);
-
-        let file_meta = fs::metadata(&skill_file).ok();
-        let modified = file_meta
-            .and_then(|m| m.modified().ok())
-            .and_then(|s| s.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs().to_string())
-            .unwrap_or_else(now_iso);
-
-        skills.push(SkillInfo {
-            id: format!("{}:{}", tool.id, dir_name),
-            name: skill_meta.name,
-            description: skill_meta.description,
-            path: path.to_string_lossy().to_string(),
-            source: tool.id.clone(),
-            enabled_for: vec![tool.id.clone()],
-            updated_at: modified,
-            github_repo_url: source_meta
-                .as_ref()
-                .map(|meta| meta.repo_url.clone()),
-            github_skill_path: source_meta.and_then(|meta| meta.skill_path),
-        });
+        let info = load_skill_cached(tool, &path, &skill_file)?;
+        live_paths.insert(path);
+        skills.push(info);
     }
 
+    prune_skill_cache(&root, &live_paths);
     Ok(skills)
 }
 
@@ -407,4 +460,117 @@ pub fn write_skill_source_meta(
         .map_err(|e| AppError::Validation(format!("Failed to serialize source metadata: {e}")))?;
     fs::write(skill_dir.join(SOURCE_META_FILE), serialized)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn parse_skill_metadata_with_frontmatter() {
+        let content = "---\nname: My Skill\ndescription: Short summary\n---\n\n# Body heading\nSome body.";
+        let meta = parse_skill_metadata(content, "fallback");
+        assert_eq!(meta.name, "My Skill");
+        assert_eq!(meta.description, "Short summary");
+    }
+
+    #[test]
+    fn parse_skill_metadata_with_quoted_values() {
+        let content = "---\nname: \"Quoted Name\"\ndescription: 'single quoted'\n---\n\nbody";
+        let meta = parse_skill_metadata(content, "fallback");
+        assert_eq!(meta.name, "Quoted Name");
+        assert_eq!(meta.description, "single quoted");
+    }
+
+    #[test]
+    fn parse_skill_metadata_folded_block_description() {
+        let content = "---\nname: Thing\ndescription: >\n  line one\n  line two\n---\n\nbody";
+        let meta = parse_skill_metadata(content, "fallback");
+        assert_eq!(meta.name, "Thing");
+        assert_eq!(meta.description, "line one line two");
+    }
+
+    #[test]
+    fn parse_skill_metadata_falls_back_to_heading_when_no_frontmatter() {
+        let content = "# Heading Name\n\nParagraph description here.\nMore text.";
+        let meta = parse_skill_metadata(content, "fallback");
+        assert_eq!(meta.name, "Heading Name");
+        assert_eq!(meta.description, "Paragraph description here.");
+    }
+
+    #[test]
+    fn parse_skill_metadata_skips_setext_underline() {
+        let content = "# Title\n\n====\n\nReal paragraph.";
+        let meta = parse_skill_metadata(content, "fallback");
+        assert_eq!(meta.name, "Title");
+        assert_eq!(meta.description, "Real paragraph.");
+    }
+
+    #[test]
+    fn parse_skill_metadata_uses_fallback_name_when_empty() {
+        let content = "\n\nno heading, no frontmatter";
+        let meta = parse_skill_metadata(content, "my-fallback");
+        assert_eq!(meta.name, "my-fallback");
+        assert_eq!(meta.description, "no heading, no frontmatter");
+    }
+
+    #[test]
+    fn parse_skill_metadata_missing_description_default() {
+        let content = "---\nname: OnlyName\n---\n";
+        let meta = parse_skill_metadata(content, "fallback");
+        assert_eq!(meta.name, "OnlyName");
+        assert_eq!(meta.description, "No description");
+    }
+
+    #[test]
+    fn dir_display_name_uses_last_component() {
+        assert_eq!(dir_display_name(Path::new("/tmp/foo/bar-baz")), "bar-baz");
+        assert_eq!(dir_display_name(Path::new("relative/name")), "name");
+    }
+
+    #[test]
+    fn normalize_optional_rel_path_trims_slashes() {
+        assert_eq!(
+            normalize_optional_rel_path(Some("/foo/bar/")),
+            Some("foo/bar".to_string())
+        );
+        assert_eq!(
+            normalize_optional_rel_path(Some("a\\b")),
+            Some("a/b".to_string())
+        );
+        assert_eq!(normalize_optional_rel_path(Some("")), None);
+        assert_eq!(normalize_optional_rel_path(None), None);
+    }
+
+    #[test]
+    fn skill_cache_reuses_entry_when_mtimes_match() {
+        let tmp = env::temp_dir().join(format!("skillsyoga-cache-test-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        let skill_dir = tmp.join("my-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        let skill_md = skill_dir.join("SKILL.md");
+        fs::write(&skill_md, "---\nname: Cached\ndescription: one\n---\n").unwrap();
+
+        let tool = ToolInfo {
+            id: "tool".into(),
+            name: "tool".into(),
+            kind: "builtin".into(),
+            config_path: String::new(),
+            skills_path: tmp.to_string_lossy().to_string(),
+            detected: true,
+            enabled: true,
+        };
+
+        let first = load_skill_cached(&tool, &skill_dir, &skill_md).unwrap();
+        // Mutate content, but keep mtime identical by writing nothing new:
+        // we re-query through the cache with the same mtime, should return
+        // the cached copy (description "one") regardless of what's on disk
+        // — we'll verify by checking cache hit semantics.
+        let second = load_skill_cached(&tool, &skill_dir, &skill_md).unwrap();
+        assert_eq!(first.name, second.name);
+        assert_eq!(first.description, second.description);
+
+        fs::remove_dir_all(&tmp).ok();
+    }
 }

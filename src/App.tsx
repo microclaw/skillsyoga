@@ -189,10 +189,14 @@ function App() {
     async (tool: ToolInfo, enabled: boolean) => {
       try {
         await setToolEnabled(tool.id, enabled);
-        toast.success(`${tool.name} is now ${enabled ? "enabled" : "disabled"}`);
+        toast.success(`${tool.name} is now ${enabled ? "enabled" : "disabled"}`, {
+          id: `tool-toggle-${tool.id}`,
+        });
         await refresh();
       } catch (error) {
-        toast.error(`Failed to update tool: ${String(error)}`);
+        toast.error(`Failed to update tool: ${String(error)}`, {
+          id: `tool-toggle-${tool.id}`,
+        });
       }
     },
     [refresh],
@@ -442,7 +446,9 @@ function App() {
                     await reorderTools(toolOrder);
                     await refresh();
                   } catch (error) {
-                    toast.error(`Failed to reorder tools: ${String(error)}`);
+                    toast.error(`Failed to reorder tools: ${String(error)}`, {
+                      id: "tool-reorder",
+                    });
                   }
                 }}
               />

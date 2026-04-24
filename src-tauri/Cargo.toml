@@ -30,3 +30,4 @@ lto = true
 strip = true
 opt-level = "s"
 codegen-units = 1
+panic = "abort"

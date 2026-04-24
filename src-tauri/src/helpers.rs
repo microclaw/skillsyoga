@@ -119,3 +119,76 @@ pub fn is_path_under_skills_root(
         path.display()
     )))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slugify_basic() {
+        assert_eq!(slugify("Hello World"), "hello-world");
+        assert_eq!(slugify("  My Skill  "), "my-skill");
+        assert_eq!(slugify("foo / bar!"), "foo-bar");
+    }
+
+    #[test]
+    fn slugify_collapses_separators() {
+        assert_eq!(slugify("a   b---c"), "a-b-c");
+        assert_eq!(slugify("__weird__name__"), "weird-name");
+    }
+
+    #[test]
+    fn slugify_keeps_ascii_alphanumeric() {
+        assert_eq!(slugify("ABC123"), "abc123");
+        assert_eq!(slugify("x_y_z"), "x-y-z");
+    }
+
+    #[test]
+    fn slugify_empty_falls_back_to_skill() {
+        assert_eq!(slugify(""), "skill");
+        assert_eq!(slugify("   "), "skill");
+        assert_eq!(slugify("!!!"), "skill");
+    }
+
+    #[test]
+    fn slugify_non_ascii_treated_as_separator() {
+        // Non-ASCII characters become separators; pure non-ASCII input has
+        // no alphanumerics left, so falls back to "skill".
+        assert_eq!(slugify("café"), "caf");
+        assert_eq!(slugify("中文"), "skill");
+    }
+
+    #[test]
+    fn expand_home_non_tilde_passthrough() {
+        let p = expand_home("/abs/path").unwrap();
+        assert_eq!(p, PathBuf::from("/abs/path"));
+        let p = expand_home("relative/path").unwrap();
+        assert_eq!(p, PathBuf::from("relative/path"));
+    }
+
+    #[test]
+    fn unique_dir_returns_preferred_when_free() {
+        let tmp = env::temp_dir().join(format!("skillsyoga-test-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        let got = unique_dir(&tmp, "my-skill");
+        assert_eq!(got, tmp.join("my-skill"));
+        fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn unique_dir_suffixes_on_conflict() {
+        let tmp = env::temp_dir().join(format!("skillsyoga-test-conflict-{}", std::process::id()));
+        fs::create_dir_all(&tmp).unwrap();
+        fs::create_dir_all(tmp.join("my-skill")).unwrap();
+        let got = unique_dir(&tmp, "my-skill");
+        assert_eq!(got, tmp.join("my-skill-1"));
+        fs::remove_dir_all(&tmp).unwrap();
+    }
+
+    #[test]
+    fn now_iso_returns_nonempty_digits() {
+        let s = now_iso();
+        assert!(!s.is_empty());
+        assert!(s.chars().all(|c| c.is_ascii_digit()));
+    }
+}
